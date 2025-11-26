@@ -1,5 +1,9 @@
 import numpy as np
 import traceback
+from copy import deepcopy
+from sklearn.cluster import MiniBatchKMeans, MeanShift, estimate_bandwidth
+from PIL import Image
+import os
 
 def sRGB_to_RGB(rgb):
     """
@@ -231,6 +235,11 @@ _from_XYZ_methods = {
     "Oklab": lambda v: XYZ_to_Oklab(v), 
 }
 
+def convert_colour(value, input_space, output_space):
+    if input_space == output_space:
+        return value
+    return _from_XYZ_methods[output_space](_to_XYZ_methods[input_space](value))
+
 class Colour:
     """A class for storing and manipulating colours."""
 
@@ -297,61 +306,157 @@ class Colour:
         return self.alpha
 
 
+class Colour_Stop(Colour):
+    """A class for the colour stops of a gradient."""
+
+    def __init__(self, position, value, space, alpha=None):
+        super().__init__(value, space, alpha)
+        self.position = position
+
+
 class Gradient:
     """A class for creating gradients through a desired colour space."""
 
-    def __init__(self, colours, positions=None, interp_space='Oklab'):
+    def __init__(self, colours, positions=None, interp_space='Oklab', cyclic_direction='near'):
         """
         Parameters:
             colours (array-like of Colours): Set of Colour objects to create the gradient with.
-            positions (array-like of floats): Positions of the colour stops. Values must be defined between 0 and 1.
-            By default colours will be spaced out equally.
-            interp_space (string): Colour space to interpolate the gradient within.
+            positions (array-like of floats): Positions of the colour stops. Values must be defined between 0 and 1. By default colours will be spaced out equally.
+            interp_space (string): Colour space to interpolate the gradient within. Default is 'Oklab'.
+            cyclic_direction (string): How the gradient handles cyclic coordinates, e.g. hue in HSV. 
         """
         n = len(colours)
         if n <= 1:
             raise ValueError("Gradient requires at least 2 colours")    # Could maybe use 1 but that would be pointless
         
         if positions is None:
-            positions = np.linspace(0, 1, n)
+            positions = np.linspace(0.0, 1.0, n)
         else:
             positions = np.asarray(positions, dtype=float)
             if positions.shape[0] != n:
                 raise ValueError(f"Number of positions ({positions.shape[0]}) does not match number of colours ({n})")
-            if np.any(positions < 0) or np.any(positions > 1):
+            if np.any(positions < 0.0) or np.any(positions > 1.0):
                 raise ValueError("Positions must be between 0 and 1")
-            
-        self.interp_space = interp_space
-        if self.interp_space not in _to_XYZ_methods:
+
+        # Check if chosen space works then add
+        if any([interp_space not in _to_XYZ_methods, interp_space not in _from_XYZ_methods]):
             raise KeyError(f"Unsupported or invalid interpolation space: {interp_space}")
-        elif self.interp_space not in _from_XYZ_methods:
-            raise KeyError(f"Unsupported or invalid interpolation space: {interp_space}")
+
+        # Generate the interpolation space colours (probably faster than re-computing each time a gradient is made)
+        # TODO: although with this approach the user will have to call a method to change the interp space, probably. I'll add that later.
+        stop_values = np.asarray([colour.get_colour(interp_space) for colour in colours])
+        stop_alphas = np.asarray([colour.alpha for colour in colours]).reshape(-1, 1)
         
         # Sort the colours by position
         sort_order = np.argsort(positions)
         self.positions = np.asarray(positions)[sort_order]
         self.colours = np.asarray(colours)[sort_order]
+        self._stop_values = np.hstack((stop_values, stop_alphas))[sort_order]
+        self._interp_space = interp_space
+        self._nstops = n
+        self._most_recent = n - 1
 
     def _sample_gradient(self, t):
         """
         Sample the gradient at a point (or set of points).
         If the gradient is empty, picked colours will be solid black.
         """
-        
+        if self._nstops <= 1:
+            if self._nstops == 0:
+                return np.zeros(4, t)
+            if self._nstops == 1:
+                return np.ones(4, t) * self._stop_values[0]
+
+        i = self.positions.searchsorted(t)
+        print(self.positions, t, i)
+        # Note: this will break if there is no stop above or below t
+        # TODO: add checks for if this occurs
+        frac = (t - self.positions[i-1]) / (self.positions[i] - self.positions[i-1])
+        values = self._stop_values[i-1] + (frac * (self._stop_values[i] - self._stop_values[i-1]))
+        print(values)
+        return values
 
     def add_stop(self, colour=None, position=None):
         """
         Add a new colour stop to the gradient.
         If colour is None then new colour will be interpolated from the existing gradient at the chosen position.
-        If position is None then the stop will be added in the centre of the largest gap.
+        If position is None then the stop will be added in the centre of the largest gap, or at either end if 1 or fewer stops are present.
 
         Parameters:
             colour (Colour): Colour object to assign to the stop.
             position (float): Position of the colour stop. Value must be defined between 0 and 1.
         """
         if position == None:
-            
+            if self._nstops <= 1:
+                if any([self._nstops == 1 and self.positions[0] > 0.5, self._nstops == 0]):
+                    position = 0.0
+                elif self._nstops == 1 and self.positions[0] <= 0.5:
+                    position = 1.0
+            else:
+                gaps = np.diff(self.positions)
+                position = self.positions[gaps.argmax()] + (gaps.max()/2)
         
+        if colour == None:
+            if self._nstops == 0:
+                colour = Colour([0, 0, 0], "RGB")
+            if self._nstops == 1:
+                colour = deepcopy(self.colours[0])
+            else:
+                colour = self._sample_gradient(position)
+
+        stop_value = np.append(colour.get_colour(self._interp_space), colour.alpha)
+
+        idx = self.positions.searchsorted(position)
+        self.positions = np.concatenate((self.positions[:idx], [position], self.positions[idx:]))
+        self.colours = np.concatenate((self.colours[:idx], [colour], self.colours[idx:]))
+        self._stop_values = np.concatenate((self._stop_values[:idx], [stop_value], self._stop_values[idx:]))
+        self._nstops += 1
+        self._most_recent = idx
+
+    def remove_stop(self, index=None, position=None):
+        """
+        Remove a colour stop from the gradient.
+        Choose to remove it either by index (preferred) or by closest position.
+        If neither is defined, the most recent stop added to the gradient will be removed.
+
+        Parameters:
+            index (integer): Index of the colour stop to remove, ordered by position.
+            position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
+        """
+        if index == None:
+            if position == None:
+                index = self._most_recent
+            else:
+                index = (np.abs(self.positions - position)).argmin()
+
+        self.positions = np.delete(self.positions, index)
+        self.colours = np.delete(self.colours, index)
+        self._stop_values = np.delete(self._stop_values, index)
+        self._nstops -= 1
+
+    def move_stop(self, new_position, index=None, position=None):
+        """
+        Move a colour stop in the gradient to a new position.
+        Choose to move it either by index (preferred) or by closest position.
+        If neither is defined, the most recent stop added to the gradient will be moved.
+
+        Parameters:
+            new_position (float): 
+            index (integer): Index of the colour stop to remove, ordered by position.
+            position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
+        """
+
+    def edit_stop(self, new_colour, index=None, position=None):
+        """
+        Edit a colour stop in the gradient.
+        Choose to edit it either by index (preferred) or by closest position.
+        If neither is defined, the most recent stop added to the gradient will be edited.
+
+        Parameters:
+            new_colour (Colour): 
+            index (integer): Index of the colour stop to remove, ordered by position.
+            position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
+        """
 
 colour = Colour([0.1, 0.1, 0.1], "RGB")
 print(colour.get_colour("Oklab"))
@@ -363,6 +468,101 @@ print(colour.get_colour("Oklab"))
 print(colour.get_colour("Hex"))
 print(colour.get_alpha())
 
+print("Gradients:")
 colour1 = Colour([0, 0.1, 0.2], "RGB")
 colour2 = Colour([1, 0.1, 0.2], "RGB")
 gradient = Gradient([colour1, colour2])
+
+print("Adding a colour:")
+#gradient.add_stop()
+#print(gradient.positions)
+#print(gradient.colours)
+
+print("Removing a colour:")
+#gradient.remove_stop()
+#print(gradient.positions)
+#print(gradient.colours)
+#print([colour.get_colour(gradient._interp_space) for colour in gradient.colours])
+
+def coloured_square(hex_string):
+    """
+    Returns a coloured square that you can print to a terminal.
+    """
+    hex_string = hex_string.strip("#")
+    assert len(hex_string) == 6
+    red = int(hex_string[:2], 16)
+    green = int(hex_string[2:4], 16)
+    blue = int(hex_string[4:6], 16)
+
+    return f"\033[48:2::{red}:{green}:{blue}m \033[49m"
+
+def k_means_clustering(data, n_clusters=8, n_runs=1, seed=None, **kwargs):
+    """
+    Perform K-Means Clustering on a set of colour values, e.g. an image.
+    
+    Parameters:
+        data (array): 2D array of colour values to cluster.
+        n_clusters (int): Number of clusters to create.
+        n_runs (int): Number of runs of the algorithm to perform. The run with the lowest overall distance will be returned.
+        seed (int, or array-like of int): Random seed for the clustering. If None, will be random (resulting in a non-deterministic outcome).
+        Must be an array of length equal to n_runs if n_runs > 1.
+    """
+    distances = []
+    clusters = []
+    labels = []
+    for i in range(n_runs):
+        if seed is not None:
+            seed = np.asarray(seed)[i]
+        kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=seed, **kwargs).fit(data)
+        distances.append(kmeans.inertia_)
+        clusters.append(kmeans.cluster_centers_)
+        labels.append(kmeans.labels_)
+
+    best_fit = np.argmax(np.asarray(distances))
+    return clusters[best_fit], labels[best_fit]
+
+def mean_shift_clustering(data, quantile=0.1, n_samples=5000, bin_seeding=True, min_bin_freq=5, n_jobs=4, **kwargs):
+    """
+    Perform Mean-Shift Clustering on a set of colour values, e.g. an image.
+    
+    Parameters:
+        data (array): 2D array of colour values to cluster.
+    """
+    #bandwidth = 0.08
+    bandwidth = estimate_bandwidth(data, quantile=quantile, n_samples=n_samples)
+    clustering = MeanShift(bandwidth=bandwidth, bin_seeding=bin_seeding, min_bin_freq=min_bin_freq, n_jobs=n_jobs, **kwargs).fit(data)
+
+    return clustering.cluster_centers_, clustering.labels_
+
+def cluster_image(img, clustering_space='Oklab', clustering_method='mean-shift', input_space='sRGB', output_space='sRGB', return_labels=False, **kwargs):
+    img_flat = np.asarray([convert_colour(value, input_space, clustering_space) for value in img.reshape(img.shape[0] * img.shape[1], 3)/255])
+
+    if clustering_method == 'k-means':
+        clusters, labels = k_means_clustering(img_flat, **kwargs)
+    if clustering_method == 'mean-shift':
+        clusters, labels = mean_shift_clustering(img_flat, **kwargs)
+
+    img_clusters = np.asarray([convert_colour(value, clustering_space, output_space) for value in clusters])
+
+    if return_labels:
+        return img_clusters, labels
+    return img_clusters
+'''
+img = np.asarray(Image.open("G:\\My Drive\\Obsidian\\Notes\\50 - Media\\51 - Albums\\Cover Art\\Hellfire.jpg"))
+img = img[::6, ::6]
+
+print('K-Means Clustering:')
+img_clusters = cluster_image(img, 'Oklab', clustering_method='k-means', n_runs=10)
+img_cluster_colours = [convert_colour(value, 'sRGB', 'Hex') for value in img_clusters]
+img_cluster_blocks = [coloured_square(hex) for hex in img_cluster_colours]
+for i in range(len(img_cluster_blocks)):
+    print(img_cluster_blocks[i], img_cluster_colours[i])
+
+
+print('Mean-Shift Clustering:')
+img_clusters = cluster_image(img, 'Oklab', clustering_method='mean-shift')
+img_cluster_colours = [convert_colour(value, 'sRGB', 'Hex') for value in img_clusters]
+img_cluster_blocks = [coloured_square(hex) for hex in img_cluster_colours]
+for i in range(len(img_cluster_blocks)):
+    print(img_cluster_blocks[i], img_cluster_colours[i])
+'''
