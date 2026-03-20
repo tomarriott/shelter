@@ -4,6 +4,23 @@ from copy import deepcopy
 from sklearn.cluster import MiniBatchKMeans, MeanShift, estimate_bandwidth
 from PIL import Image
 import os
+from scipy.signal import convolve2d
+
+def coloured_square(hex_string):
+    """
+    Returns a coloured square that you can print to a terminal.
+    """
+    hex_string = hex_string.strip("#")
+    assert len(hex_string) == 6
+    red = int(hex_string[:2], 16)
+    green = int(hex_string[2:4], 16)
+    blue = int(hex_string[4:6], 16)
+
+    return f"\033[48:2::{red}:{green}:{blue}m \033[49m : {hex_string}"
+
+# ---------------- Conversion Functions ----------------
+
+# TODO: fix all the below to allow alpha channels
 
 def sRGB_to_RGB(rgb):
     """
@@ -89,6 +106,34 @@ def sRGB_to_Hex(rgb):
             hexes.append(hex)
         return hexes
     return '#' + ''.join('%02X' % round(i*255) for i in rgb)
+
+def Oklab_to_Oklch(Lab):
+    """
+    Convert a set of Oklab colour values to Oklch.
+    Values must be defined between 0 and 1.
+    If inputting arrays of values, the input arrays must be of the same length.
+
+    Parameters:
+        Lab (array-like): Oklab value
+
+    Returns:
+        LCh (array-like): Oklch value
+    """
+    return np.asarray([Lab[0], np.sqrt(Lab[1]**2 + Lab[2]**2), np.atan2(Lab[2], Lab[1])])
+
+def Oklch_to_Oklab(LCh):
+    """
+    Convert a set of Oklch colour values to Oklab.
+    Values must be defined between 0 and 1.
+    If inputting arrays of values, the input arrays must be of the same length.
+
+    Parameters:
+        LCh (array-like): Oklch value
+
+    Returns:
+        Lab (array-like): Oklab value
+    """
+    return np.asarray([LCh[0], LCh[1] * np.cos(LCh[2]), LCh[1] * np.sin(LCh[2])])
 
 def XYZ_to_RGB(XYZ):
     """
@@ -224,6 +269,7 @@ _to_XYZ_methods = {
     "HSV": lambda v: HSV_to_XYZ(v),
     "XYZ": lambda v: np.array(v),
     "Oklab": lambda v: Oklab_to_XYZ(v), 
+    "Oklch": lambda v: Oklab_to_XYZ(Oklch_to_Oklab(v)),
 }
 
 _from_XYZ_methods = {
@@ -233,12 +279,23 @@ _from_XYZ_methods = {
     "Hex": lambda v: sRGB_to_Hex(RGB_to_sRGB(XYZ_to_RGB(v))),
     "XYZ": lambda v: np.array(v),
     "Oklab": lambda v: XYZ_to_Oklab(v), 
+    "Oklch": lambda v: Oklab_to_Oklch(XYZ_to_Oklab(v)),
 }
 
-def convert_colour(value, input_space, output_space):
+# TODO: this
+_cyclic_coords = {
+    ""
+}
+
+def convert_colour(value, input_space, output_space, clip=False):
     if input_space == output_space:
         return value
-    return _from_XYZ_methods[output_space](_to_XYZ_methods[input_space](value))
+    value = _from_XYZ_methods[output_space](_to_XYZ_methods[input_space](value))
+    if clip:
+        value = np.clip(value, a_min=0, a_max=1)
+    return value
+
+# ---------------- Colour Class ----------------
 
 class Colour:
     """A class for storing and manipulating colours."""
@@ -291,7 +348,7 @@ class Colour:
         Get the colour value in the desired colour space.
 
         space (string): Colour space to output into.
-        return_alpha (bool, default False): If True, returns (colour, alpha).
+        return_alpha (bool): If True, returns (colour, alpha). Default False.
         """
         if space not in _from_XYZ_methods:
             raise KeyError(f'Unsupported or invalid colour space: {space}')
@@ -313,9 +370,11 @@ class Colour_Stop(Colour):
         super().__init__(value, space, alpha)
         self.position = position
 
+# ---------------- Gradient Class ----------------
 
 class Gradient:
     """A class for creating gradients through a desired colour space."""
+    # TODO: turn the colour stops into full objects
 
     def __init__(self, colours, positions=None, interp_space='Oklab', cyclic_direction='near'):
         """
@@ -323,7 +382,7 @@ class Gradient:
             colours (array-like of Colours): Set of Colour objects to create the gradient with.
             positions (array-like of floats): Positions of the colour stops. Values must be defined between 0 and 1. By default colours will be spaced out equally.
             interp_space (string): Colour space to interpolate the gradient within. Default is 'Oklab'.
-            cyclic_direction (string): How the gradient handles cyclic coordinates, e.g. hue in HSV. 
+            cyclic_direction (string): How the gradient handles cyclic coordinates, e.g. hue in HSV. Choose from: 'near', 'far', 'clockwise', 'anticlockwise'. TODO
         """
         n = len(colours)
         if n <= 1:
@@ -343,7 +402,7 @@ class Gradient:
             raise KeyError(f"Unsupported or invalid interpolation space: {interp_space}")
 
         # Generate the interpolation space colours (probably faster than re-computing each time a gradient is made)
-        # TODO: although with this approach the user will have to call a method to change the interp space, probably. I'll add that later.
+        # although with this approach the user will have to call a method to change the interp space
         stop_values = np.asarray([colour.get_colour(interp_space) for colour in colours])
         stop_alphas = np.asarray([colour.alpha for colour in colours]).reshape(-1, 1)
         
@@ -353,13 +412,15 @@ class Gradient:
         self.colours = np.asarray(colours)[sort_order]
         self._stop_values = np.hstack((stop_values, stop_alphas))[sort_order]
         self._interp_space = interp_space
+        self._cyclic_direction = cyclic_direction
         self._nstops = n
         self._most_recent = n - 1
 
-    def _sample_gradient(self, t):
+    def _pick_gradient(self, t):
         """
         Sample the gradient at a point (or set of points).
         If the gradient is empty, picked colours will be solid black.
+        Returns values in the interpolation space.
         """
         if self._nstops <= 1:
             if self._nstops == 0:
@@ -368,12 +429,10 @@ class Gradient:
                 return np.ones(4, t) * self._stop_values[0]
 
         i = self.positions.searchsorted(t)
-        print(self.positions, t, i)
         # Note: this will break if there is no stop above or below t
         # TODO: add checks for if this occurs
         frac = (t - self.positions[i-1]) / (self.positions[i] - self.positions[i-1])
-        values = self._stop_values[i-1] + (frac * (self._stop_values[i] - self._stop_values[i-1]))
-        print(values)
+        values = (frac[np.newaxis].T * (self._stop_values[i] - self._stop_values[i-1])) + self._stop_values[i-1]
         return values
 
     def add_stop(self, colour=None, position=None):
@@ -436,6 +495,7 @@ class Gradient:
 
     def move_stop(self, new_position, index=None, position=None):
         """
+        TODO: make this
         Move a colour stop in the gradient to a new position.
         Choose to move it either by index (preferred) or by closest position.
         If neither is defined, the most recent stop added to the gradient will be moved.
@@ -448,6 +508,7 @@ class Gradient:
 
     def edit_stop(self, new_colour, index=None, position=None):
         """
+        TODO: make this as well
         Edit a colour stop in the gradient.
         Choose to edit it either by index (preferred) or by closest position.
         If neither is defined, the most recent stop added to the gradient will be edited.
@@ -458,6 +519,61 @@ class Gradient:
             position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
         """
 
+    def change_interp_space(self, new_interp_space=None, new_cyclic_direction=None):
+        """
+        TODO: test this works
+        Change the colour space through which the gradient is generated.
+        Alternatively, change the behaviour of cyclic coordinates.
+        """
+        if new_interp_space is not None:
+            stop_values = np.asarray([colour.get_colour(new_interp_space) for colour in self.colours])
+            stop_alphas = np.asarray([colour.alpha for colour in self.colours]).reshape(-1, 1)
+            
+            self._stop_values = np.hstack((stop_values, stop_alphas))[self.sort_order]
+            self._interp_space = new_interp_space
+
+        if new_cyclic_direction is not None:
+            self._cyclic_direction = new_cyclic_direction
+
+    def sample(self, start, end, n_samples, return_Colour=False, output_space='sRGB', return_alpha=True, clip=False):
+        """
+        Sample the gradient.
+        Choose a start and end point, and the number of (linearly spaced) samples to take.
+        Can either return values in a chosen colour space (more efficient) or Colour objects.
+        
+        Parameters:
+            start (float): Start point of sampling. Value must be defined between 0 and 1.
+            end (float): End point of sampling. Value must be defined between 0 and 1.
+            n_samples (integer): Number of points to sample at.
+            return_Colour (bool): Whether to return colours as Colour objects. Default False.
+            output_space (string): Colour space to return values in if return_Colour is False.
+            return_alpha (bool): If True and return_Colour is False, returned values will include an alpha channel. Default True.
+            clip (bool): If True, clips the output values between 0 and 1.
+
+        Returns:
+
+        """
+        t = np.linspace(start, end, n_samples)
+        colours = self._pick_gradient(t)
+
+        values = colours[:, :3]
+        alphas = colours[:, 3]
+
+        if return_Colour:
+            return np.asarray([Colour(value, self._interp_space, alpha) for value, alpha in zip(values, alphas)])
+        
+        space_values = np.asarray([convert_colour(value, self._interp_space, output_space) for value in values])
+
+        if clip:
+            space_values = np.clip(space_values, a_min=0, a_max=1)
+            alphas = np.clip(alphas, a_min=0, a_max=1)
+
+        if not return_alpha:
+            return space_values
+
+        return np.hstack((space_values, alphas.reshape(-1, 1)))
+
+'''
 colour = Colour([0.1, 0.1, 0.1], "RGB")
 print(colour.get_colour("Oklab"))
 print(colour.get_colour("Hex"))
@@ -467,34 +583,46 @@ colour = Colour([np.linspace(0.1, 0.1, 8), np.linspace(0.1, 0.1, 8), np.linspace
 print(colour.get_colour("Oklab"))
 print(colour.get_colour("Hex"))
 print(colour.get_alpha())
-
+'''
+'''
 print("Gradients:")
-colour1 = Colour([0, 0.1, 0.2], "RGB")
-colour2 = Colour([1, 0.1, 0.2], "RGB")
-gradient = Gradient([colour1, colour2])
+colour1 = Colour([0, 1, 1], "RGB")
+colour2 = Colour([1, 0, 1], "RGB")
+gradient1 = Gradient([colour1, colour2], interp_space='sRGB')
 
+gradient1_output = gradient1.sample(0, 1, 5, output_space='RGB')
+colour_print_1 = [coloured_square(convert_colour(value[:3], 'RGB', 'Hex')) for value in gradient1_output]
+for line in colour_print_1:
+    print(line)
+
+gradient2 = Gradient([colour1, colour2], interp_space='Oklab')
+gradient2_output = gradient2.sample(0, 1, 5, output_space='RGB')
+colour_print_2 = [coloured_square(convert_colour(value[:3], 'RGB', 'Hex')) for value in gradient2_output]
+for line in colour_print_2:
+    print(line)
+
+gradient3 = Gradient([colour1, colour2], interp_space='Oklch')
+gradient3_output = gradient3.sample(0, 1, 11, output_space='RGB', clip=True)
+colour_print_3 = [coloured_square(convert_colour(value[:3], 'RGB', 'Hex')) for value in gradient3_output]
+for line in colour_print_3:
+    print(line)
+'''
+'''
 print("Adding a colour:")
-#gradient.add_stop()
-#print(gradient.positions)
-#print(gradient.colours)
+gradient.add_stop()
+print(gradient.positions)
+print(gradient.colours)
 
 print("Removing a colour:")
-#gradient.remove_stop()
-#print(gradient.positions)
-#print(gradient.colours)
-#print([colour.get_colour(gradient._interp_space) for colour in gradient.colours])
+gradient.remove_stop()
+print(gradient.positions)
+print(gradient.colours)
+print([colour.get_colour(gradient._interp_space) for colour in gradient.colours])
+'''
 
-def coloured_square(hex_string):
-    """
-    Returns a coloured square that you can print to a terminal.
-    """
-    hex_string = hex_string.strip("#")
-    assert len(hex_string) == 6
-    red = int(hex_string[:2], 16)
-    green = int(hex_string[2:4], 16)
-    blue = int(hex_string[4:6], 16)
+# ---------------- Image Filtering ----------------
 
-    return f"\033[48:2::{red}:{green}:{blue}m \033[49m"
+## ---------------- Clustering ----------------
 
 def k_means_clustering(data, n_clusters=8, n_runs=1, seed=None, **kwargs):
     """
@@ -534,31 +662,124 @@ def mean_shift_clustering(data, quantile=0.1, n_samples=5000, bin_seeding=True, 
 
     return clustering.cluster_centers_, clustering.labels_
 
-def cluster_image(img, clustering_space='Oklab', clustering_method='mean-shift', input_space='sRGB', output_space='sRGB', return_labels=False, **kwargs):
-    img_flat = np.asarray([convert_colour(value, input_space, clustering_space) for value in img.reshape(img.shape[0] * img.shape[1], 3)/255])
+def cluster_image(img, working_space='Oklab', clustering_method='mean-shift', input_space='sRGB', output_space='sRGB', return_labels=False, **kwargs):
+    img_flat = np.asarray([convert_colour(value, input_space, working_space) for value in img.reshape(img.shape[0] * img.shape[1], 3)/255])
 
     if clustering_method == 'k-means':
         clusters, labels = k_means_clustering(img_flat, **kwargs)
     if clustering_method == 'mean-shift':
         clusters, labels = mean_shift_clustering(img_flat, **kwargs)
 
-    img_clusters = np.asarray([convert_colour(value, clustering_space, output_space) for value in clusters])
+    img_clusters = np.asarray([convert_colour(value, working_space, output_space) for value in clusters])
 
     if return_labels:
         return img_clusters, labels
     return img_clusters
+
+def posterise(img, **kwargs):
+    img_clusters, img_labels = cluster_image(img, return_labels=True, **kwargs)
+    img_clusters = (img_clusters * 255).astype('uint8')
+    return img_clusters[img_labels].reshape(img.shape[0], img.shape[1], 3)
+
+def image_kernel(img, kernels, working_space='sRGB', input_space='sRGB', output_space='sRGB', flatten=False):
+    """
+    Apply a set of kernel filters to an image.
+    A list of filters may be given, which will be applied in order.
+    """
+    img_shape = img.shape
+
+    if not flatten:
+        img_working = np.asarray([convert_colour(value, input_space, working_space) for value in img.reshape(img_shape[0] * img_shape[1], 3)/255]).reshape(img_shape[0], img_shape[1], 3)
+
+        r_ch = img_working[:, :, 0]
+        g_ch = img_working[:, :, 1]
+        b_ch = img_working[:, :, 2]
+
+        if type(kernels) != list:
+            kernels = [kernels]
+        for kernel in kernels:
+            r_ch = convolve2d(r_ch, kernel, mode='same')
+            g_ch = convolve2d(g_ch, kernel, mode='same')
+            b_ch = convolve2d(b_ch, kernel, mode='same')
+
+        img_working = np.stack([r_ch, g_ch, b_ch], axis=-1)
+
+        return (np.asarray([convert_colour(value, working_space, output_space) for value in img_working.reshape(img_shape[0] * img_shape[1], 3)*255]).reshape(img_shape[0], img_shape[1], 3)).astype('uint8')
+
+    if flatten:
+        img_working = (img[:, :, 0] + img[:, :, 1] + img[:, :, 2]) / 3
+
+        if type(kernels) != list:
+            kernels = [kernels]
+        for kernel in kernels:
+            img_working = convolve2d(img_working, kernel, mode='same')
+
+        return img_working
+
+# Source - https://stackoverflow.com/questions/29731726/how-to-calculate-a-gaussian-kernel-matrix-efficiently-in-numpy
+# Posted by clemisch, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-12-29, License - CC BY-SA 4.0
+   
+def gkern(l=5, sig=1.):
+    """
+    Creates Gaussian kernel with side length 'l' and a sigma of 'sig'.
+    """
+    ax = np.linspace(-(l - 1) / 2., (l - 1) / 2., l)
+    gauss = np.exp(-0.5 * np.square(ax) / np.square(sig))
+    kernel = np.outer(gauss, gauss)
+    return kernel / np.sum(kernel)
+
+def box_kernel(l=5):
+    """
+    Creates a box kernel with side length 'l'.
+    """
+    return np.ones((l, l)) / l**2
+
+def image_blur(img, kernel_size=5, type='gaussian', sigma=1, **kwargs):
+    if type == 'gaussian':
+        kernel = gkern(kernel_size, sigma)
+    if type == 'box':
+        kernel = box_kernel(kernel_size)
+
+    return image_kernel(img, kernel, **kwargs)
+
+def image_sharpen(img, kernel_size, **kwargs):
+    kernel = np.asarray([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+    return image_kernel(img, kernel, **kwargs)
+
+def image_edge_detection(img, kernel_size=3, type='simple', flatten=True, **kwargs):
+    if type == 'simple':
+        kernel = np.asarray([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
+        edges = image_kernel(img, kernel, flatten=flatten, **kwargs)
+    if type == 'sobel':
+        kernel_x = np.asarray([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
+        kernel_y = np.asarray([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
+        G_x = image_kernel(img, kernel_x, flatten=flatten, **kwargs)
+        G_y = image_kernel(img, kernel_y, flatten=flatten, **kwargs)
+        print(G_x)
+        edges = np.sqrt((G_x**2) + (G_y**2))
+        theta = np.atan2(G_y, G_x)
+    
+    return edges
+
+"G:\\My Drive\\Obsidian\\Notes\\50 - Media\\51 - Albums\\Cover Art\\Hellfire.jpg"
+"E:\\Blender\\Landscapes\\REALISTIC\\The Graveyard\\Renders\\Graveyard Shift 3.png"
+"E:\\Blender\\Space\\Website Planets\\Gas Giant 1\\Renders\\Gas Giant 9.png"
+
+img = np.asarray(Image.open("E:\\Blender\\Landscapes\\REALISTIC\\The Graveyard\\Renders\\Graveyard Shift 3.png"))
+img = img[::4, ::4]
+
+image_blurred = image_blur(img, kernel_size=9, sigma=2)
+Image.fromarray(image_blurred, 'RGB').save("Blurred.png")
+
+image_posterised = posterise(image_blurred, working_space='Oklab', clustering_method='mean-shift', quantile=0.05) # n_clusters=8, n_runs=10)
+Image.fromarray(image_posterised, 'RGB').save("Posterised.png")
+
+image_edges = image_edge_detection(image_posterised, type='sobel')
+image_edges = ((image_edges / np.max(image_edges))*255).astype('uint8')
+Image.fromarray(image_edges, 'L').save("Edges.png")
+
 '''
-img = np.asarray(Image.open("G:\\My Drive\\Obsidian\\Notes\\50 - Media\\51 - Albums\\Cover Art\\Hellfire.jpg"))
-img = img[::6, ::6]
-
-print('K-Means Clustering:')
-img_clusters = cluster_image(img, 'Oklab', clustering_method='k-means', n_runs=10)
-img_cluster_colours = [convert_colour(value, 'sRGB', 'Hex') for value in img_clusters]
-img_cluster_blocks = [coloured_square(hex) for hex in img_cluster_colours]
-for i in range(len(img_cluster_blocks)):
-    print(img_cluster_blocks[i], img_cluster_colours[i])
-
-
 print('Mean-Shift Clustering:')
 img_clusters = cluster_image(img, 'Oklab', clustering_method='mean-shift')
 img_cluster_colours = [convert_colour(value, 'sRGB', 'Hex') for value in img_clusters]

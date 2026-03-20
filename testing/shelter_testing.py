@@ -5,14 +5,14 @@ from shelter import *
 
 # Example usage
 if __name__ == "__main__":
-    sys = System("Kepler-16")
+    system = System("Kepler-16")
     star_a = Star("Kepler-16A")
     star_b = Star("Kepler-16B")
     planet = Planet("Kepler-16b")
 
-    sys.add_star(star_a)
-    sys.add_star(star_b)
-    sys.add_planet(planet)
+    system.add_star(star_a)
+    system.add_star(star_b)
+    system.add_planet(planet)
 
     star_a.add_planet(planet)
     star_b.add_planet(planet)
