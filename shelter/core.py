@@ -612,6 +612,7 @@ class ParameterContainer:
                 self._suffix_map[alt] = attr
 
     def set_param(self, name, value, upper=None, lower=None, aliases=None):
+        '''Set a parameter. Optionally include uncertainties.'''
         param = Parameter(value, upper, lower, aliases=[name] + (aliases or []))
         self._parameters[name] = param
         for alias in param.aliases:
@@ -620,6 +621,7 @@ class ParameterContainer:
                 self._aliases[f"{alias}{suffix}"] = f"{name}{suffix}"
 
     def get_param(self, name):
+        '''Retrieve a parameter.'''
         real_name = self._aliases.get(name, name)
         base, suffix_attr = self._split_suffix(real_name)
         param = self._parameters.get(base)
@@ -670,13 +672,49 @@ class ParameterContainer:
                 "upper": param.upper
             }
         return None
+    
+    def get_absolute_uncertainties(self, param_name):
+        # TODO: make this more user-friendly / intuitive
+        param = self._parameters.get(param_name)
+        if param:
+            return [
+                param.value - param.lower,
+                param.value + param.upper
+            ]
+        return None
+    
+    def retrieve_params(self, data, dict, uncertainty_dict=None, aliases=None):
+        for key in dict.keys():
+            try:
+                header = dict[key]
+                value = data[header]
+                if np.ma.is_masked(value):
+                    value = np.array([value])[0]
+                if np.isnan(value):
+                    value = None
+
+                if uncertainty_dict is not None:
+                    upper = None
+                    lower = None
+                else:
+                    upper = None
+                    lower = None
+
+                self.set_param(key, value, upper, lower, aliases)
+            
+            except KeyError:
+                print(f'{dict[key]} not in data headers, skipping.')
+                continue
+
+    def __repr__(self):
+        return f"ParameterContainer({self._parameters})"
 
 ########################
 # --- SYSTEM CLASS --- #
 ########################
 
 class System(ParameterContainer):
-    def __init__(self, name):
+    def __init__(self, name="Unnamed System"):
         super().__init__()
         self.name = name
         self.stars = []
@@ -690,21 +728,25 @@ class System(ParameterContainer):
         self.planets.append(planet)
         planet.system = self
 
-    def create_custom_star(self, data):
+    def create_custom_star(self, data, uncertainty_dict=None):
         star = Star(data.get("name", "Unnamed Star"))
         for key, value in data.items():
-            setattr(star, key, value)
+            star.set_param(key, value)
 
         if star.name in [s.name for s in self.stars]:
             return None
 
         self.add_star(star)
         return star
+    
+        # TODO: replace code in create_custom_ calls with a unified function for all ParameterContainers
+        # maybe merge this with create_data calls too - have it go through retrieve_params, and only rely on dictionaries (or just make it agnostic to dicts or tables)
+        # needs to be able to handle uncertainty dicts with both prefixes and suffixes
 
-    def create_custom_planet(self, data):
+    def create_custom_planet(self, data, uncertainty_dict=None):
         planet = Planet(data.get("name", "Unnamed Planet"))
         for key, value in data.items():
-            setattr(planet, key, value)
+            planet.set_param(key, value)
 
         if planet.name in [p.name for p in self.planets]:
             return None
@@ -716,7 +758,7 @@ class System(ParameterContainer):
         star = Star()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        retrieve_params(star, star_params, data)
+        star.retrieve_params(data, star_params, uncertainty_suffixes, star_aliases)
         retrieve_names(star, star_names, data)
 
         if star.name in [s.name for s in self.stars]:
@@ -729,7 +771,7 @@ class System(ParameterContainer):
         planet = Planet()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        retrieve_params(planet, planet_params, data)
+        planet.retrieve_params(data, planet_params, uncertainty_suffixes, planet_aliases)
         retrieve_names(planet, planet_names, data)
 
         if planet.name in [p.name for p in self.planets]:
@@ -739,7 +781,7 @@ class System(ParameterContainer):
         return planet
 
 class Star(ParameterContainer):
-    def __init__(self, name):
+    def __init__(self, name="Unnamed Star"):
         super().__init__()
         self.name = name
         self.system = None
@@ -756,7 +798,7 @@ class Star(ParameterContainer):
         planet.host_stars.append(self)
 
 class Planet(ParameterContainer):
-    def __init__(self, name):
+    def __init__(self, name='Unnamed Star'):
         super().__init__()
         self.name = name
         self.system = None

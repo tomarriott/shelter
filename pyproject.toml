@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shelter"
+version = "0.1.0"
+description = "Shelter astronomy package"
+requires-python = ">=3.8"
+authors = [{name = "Your Name"}]
+dependencies = ["numpy", "pandas", "astropy", "astroquery"]
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+where = ["."]

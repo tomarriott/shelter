@@ -1,0 +1,5 @@
+.venv
+.vscode
+shelter/__pycache__
+shelter/data_dump
+shelter.egg-info
