@@ -1,0 +1,30 @@
+figure.figsize: 10, 12
+
+axes.titlesize: large
+axes.labelsize: medium
+xtick.labelsize: small
+ytick.labelsize: small
+legend.fontsize: medium
+
+text.color: black
+axes.edgecolor: black
+axes.labelcolor: black
+
+xtick.top: True
+xtick.bottom: True
+xtick.minor.visible: True
+xtick.direction: in
+xtick.color: black
+ytick.left: True
+ytick.right: True
+ytick.minor.visible: True
+ytick.direction: in
+ytick.color: black
+
+legend.frameon: False
+legend.labelcolor: black
+
+scatter.marker: o
+scatter.edgecolors: black
+
+savefig.transparent: True

@@ -12,39 +12,15 @@ import matplotlib.pyplot as plt
 #import gaia_query as gaia
 from pathlib import Path
 
+from .io import *
+
+# for testing
 import time
 start_time = time.time()
 
 ########################
 # --- LOADING DATA --- #
 ########################
-
-def get_directory():
-    try:
-        # Try to use __file__ for regular scripts
-        file_path = Path(__file__)
-        return file_path.parent
-    except NameError:
-        # Fallback for Jupyter notebooks
-        try:
-            import ipynbname
-            notebook_path = ipynbname.path()
-            return notebook_path.parent
-        except Exception as e:
-            print("Could not determine the file path:", e)
-            return None
-        
-def file_load(file):
-    # Define working directory & read path
-    raw_data_path = Path('.')  # Tuple of all subdirectories below CWD
-    csv_location = str(list(raw_data_path.glob("**/" + file))[0])
-    return pd.read_csv(csv_location)
-
-def create_folder(folder):
-    is_exist = os.path.exists(folder)
-    if not is_exist:
-        # Create a new directory because it does not exist
-        os.makedirs(folder)
 
 def fill_values(planet_table, planet_data, required=None):
     # Gather required data, prioritizing values with the smallest uncertainty

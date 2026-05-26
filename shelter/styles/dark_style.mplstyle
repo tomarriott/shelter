@@ -1,0 +1,36 @@
+figure.figsize: 10, 12
+
+axes.titlesize: large
+axes.labelsize: medium
+xtick.labelsize: small
+ytick.labelsize: small
+legend.fontsize: medium
+
+text.color: white
+axes.edgecolor: white
+axes.labelcolor: white
+
+xtick.top: True
+xtick.bottom: True
+xtick.minor.visible: True
+xtick.direction: in
+xtick.color: white
+ytick.left: True
+ytick.right: True
+ytick.minor.visible: True
+ytick.direction: in
+ytick.color: white
+
+legend.frameon: False
+legend.labelcolor: white
+
+scatter.marker: o
+scatter.edgecolors: white
+
+boxplot.flierprops.color: white
+boxplot.flierprops.markeredgecolor: white
+boxplot.boxprops.color: white
+boxplot.whiskerprops.color: white
+boxplot.capprops.color: white
+
+savefig.transparent: True
