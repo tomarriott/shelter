@@ -1,9 +1,9 @@
 import numpy as np
 # from dataclasses import dataclass, field
 
-###########################################################################
-# - DATA CLASSES -------------------------------------------------------- #
-###########################################################################
+################################################################################
+# - DATA CLASSES ------------------------------------------------------------- #
+################################################################################
 
 # Merge RV and LC classes
 # TODO: Make these dataclasses?
@@ -22,9 +22,9 @@ class DataContainer:
         self.N = len(t)
         self.instrument = instrument
 
-# ----------------------------------------------------------------------- #
-#  Lightcurve class                                                       #
-# ----------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# Lightcurve class                                                             #
+# ---------------------------------------------------------------------------- #
 
 class LightCurve(DataContainer):
     def __init__(self, *args):
@@ -36,9 +36,9 @@ class LightCurve(DataContainer):
     def to_lightkurve(self, **kwargs):
         return to_lightkurve(self, **kwargs)
 
-# ----------------------------------------------------------------------- #
-#  Radial velocity class                                                  #
-# ----------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# Radial velocity class                                                        #
+# ---------------------------------------------------------------------------- #
 
 class RadialVelocity(DataContainer):
     def __init__(self, *args):
@@ -116,10 +116,10 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
         If not exactly one binning scheme is specified, if an unrecognised
         method is given, or if the inputs have inconsistent shapes / values.
     '''
-    # ------------------------------------------------------------------- #
-    #  Input validation                                                   #
-    # ------------------------------------------------------------------- #
-    if yerr == None:
+    # ------------------------------------------------------------------------ #
+    # Input validation                                                         #
+    # ------------------------------------------------------------------------ #
+    if yerr is None or sum(yerr) == 0:
         yerr = np.zeros(np.shape(y))
         no_yerr = True
     else:
@@ -150,13 +150,13 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
 
     N = len(t)
 
-    # ------------------------------------------------------------------- #
-    #  Build a list of index slices, one per bin                          #
-    # ------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    # Build a list of index slices, one per bin                                #
+    # ------------------------------------------------------------------------ #
     slices = []  # each element is a boolean mask or array of indices
 
     if n_points is not None:
-        # --- fixed number of data-points per bin ------------------------
+        # fixed number of data-points per bin -------------------------------- #
         n_points = int(n_points)
         if n_points < 1:
             raise ValueError("n_points must be >= 1.")
@@ -164,7 +164,7 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
         slices = [np.arange(s, min(s + n_points, N)) for s in starts]
 
     elif n_bins is not None:
-        # --- fixed total number of (time-equal) bins --------------------
+        # fixed total number of (time-equal) bins ---------------------------- #
         n_bins = int(n_bins)
         if n_bins < 1:
             raise ValueError("n_bins must be >= 1.")
@@ -180,7 +180,7 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
                 slices.append(np.where(mask)[0])
 
     else:
-        # --- fixed time-span per bin ------------------------------------
+        # fixed time-span per bin -------------------------------------------- #
         if t_bins <= 0:
             raise ValueError("t_bins must be > 0.")
         left = t[0]
@@ -193,9 +193,9 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
                 break
             left = right
 
-    # ------------------------------------------------------------------- #
-    #  Compute bin statistics                                             #
-    # ------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    # Compute bin statistics                                                   #
+    # ------------------------------------------------------------------------ #
     t_out, y_out, yerr_out = [], [], []
 
     for idx in slices:
@@ -207,14 +207,17 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
         if method == "mean":
             # Inverse-variance weighted mean
             if no_yerr:
-                weights  = np.ones(len(t_bin))
+                t_centre     = np.mean(t_bin)
+                y_centre     = np.mean(y_bin)
+                y_err_centre = np.std(y_bin) / np.sqrt(n)
+
             else:
                 weights  = 1.0 / err_bin**2
-            w_sum        = weights.sum()
-            t_centre     = np.sum(weights * t_bin) / w_sum
-            y_centre     = np.sum(weights * y_bin) / w_sum
-            # Uncertainty: sqrt(1 / sum(w_i))  – standard error of weighted mean
-            y_err_centre = np.sqrt(1.0 / w_sum)
+                w_sum        = weights.sum()
+                t_centre     = np.sum(weights * t_bin) / w_sum
+                y_centre     = np.sum(weights * y_bin) / w_sum
+                # Uncertainty: sqrt(1 / sum(w_i))  – standard error of weighted mean
+                y_err_centre = np.sqrt(1.0 / w_sum)
 
         else:  # median
             t_centre     = t_bin.mean()          # simple mean of times
@@ -235,7 +238,4 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method="m
         y_out.append(y_centre)
         yerr_out.append(y_err_centre)
 
-    if no_yerr:
-        return np.array(t_out), np.array(y_out),
-    else:
-        return np.array(t_out), np.array(y_out), np.array(yerr_out)
+    return np.array(t_out), np.array(y_out), np.array(yerr_out)

@@ -10,13 +10,13 @@ def use_custom_styles():
     plt.style.use(find_path('styles/use_serif.mplstyle'))
     plt.style.use(find_path('styles/paper_text.mplstyle'))
 
-###########################################################################
-# - PLOTTING DATA ------------------------------------------------------- #
-###########################################################################
+################################################################################
+# - PLOTTING DATA ------------------------------------------------------------ #
+################################################################################
 
-# ----------------------------------------------------------------------- #
-#  Lightcurve plotting                                                    #
-# ----------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# Lightcurve plotting                                                          #
+# ---------------------------------------------------------------------------- #
 
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, **kwargs):
     if ax == None:
@@ -25,7 +25,8 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, **kwargs
     if yerr == None:
         yerr = np.zeros(np.shape(y))
 
-    ax.errorbar(t, y, yerr, c='#f04f4f', s=1, alpha=0.5, zorder=1)
+    ax.scatter(t, y, c='#f04f4f', edgecolors='#4f2020', s=1, alpha=0.1, zorder=2)
+    ax.errorbar(t, y, yerr=yerr, fmt='', ls='none', c='#f04f4f', alpha=0.1, zorder=2)
 
     for n in transit_times:
         ax.axvline(transit_times[n], c='#40a1a1', alpha=0.5, zorder=0)
@@ -34,7 +35,7 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, **kwargs
         bin_data_args = extract_kwargs(bin_data, kwargs)
         t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
 
-        ax.errorbar(t_bin, y_bin, yerr_bin, c='w', edgecolor='k', linewidths=1, s=10, zorder=2)
+        ax.errorbar(t_bin, y_bin, yerr_bin, ms=4, capsize=2, elinewidth=1, fmt='o', mfc='w', mec='k', ecolor='k', zorder=20)
 
     return ax
 
@@ -55,6 +56,6 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=True, save=False
             save_path = os.path.join(dirname, 'lightcurve.png')
         plt.savefig(save_path, **savefig_args)
 
-# ----------------------------------------------------------------------- #
-#  Phasefold plotting                                                    #
-# ----------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# Phasefold plotting                                                           #
+# ---------------------------------------------------------------------------- #
