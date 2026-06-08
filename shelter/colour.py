@@ -766,6 +766,7 @@ def image_edge_detection(img, kernel_size=3, type='simple', flatten=True, **kwar
 "E:\\Blender\\Landscapes\\REALISTIC\\The Graveyard\\Renders\\Graveyard Shift 3.png"
 "E:\\Blender\\Space\\Website Planets\\Gas Giant 1\\Renders\\Gas Giant 9.png"
 
+'''
 img = np.asarray(Image.open("E:\\Blender\\Landscapes\\REALISTIC\\The Graveyard\\Renders\\Graveyard Shift 3.png"))
 img = img[::4, ::4]
 
@@ -779,7 +780,6 @@ image_edges = image_edge_detection(image_posterised, type='sobel')
 image_edges = ((image_edges / np.max(image_edges))*255).astype('uint8')
 Image.fromarray(image_edges, 'L').save("Edges.png")
 
-'''
 print('Mean-Shift Clustering:')
 img_clusters = cluster_image(img, 'Oklab', clustering_method='mean-shift')
 img_cluster_colours = [convert_colour(value, 'sRGB', 'Hex') for value in img_clusters]
