@@ -84,8 +84,8 @@ def merge_tables(id, input_data, filepath=None):
     data = input_data.to_pandas()
 
     if mission == 'Kepler':
-        file = 'KOI list.csv'
-        file_df = file_load(file)
+        file = 'shelter/data_dump/KOI list.csv'
+        file_df = read_csv(file, skiprows=53)
         file_df = file_df[file_df['koi_disposition'] != 'FALSE POSITIVE']
         file_df = file_df[file_df.kepid == int(id.lstrip('KIC '))].reset_index()
 
@@ -124,10 +124,10 @@ def merge_tables(id, input_data, filepath=None):
         })
 
     if mission == 'TESS':
-        file = 'TOI list.csv'
-        file_df = file_load(file)
+        file = 'shelter/data_dump/TOI list.csv'
+        file_df = read_csv(file, skiprows=69)
         file_df = file_df[file_df['tfopwg_disp'] != 'FP']
-        file_df = file_df[file_df.toipfx == int(id.lstrip('TOI '))].reset_index()
+        file_df = file_df[np.round(file_df.toi.to_numpy(), 0) == int(id.lstrip('TOI-'))].reset_index()
 
         column_mapping = {
             "pl_orbper": "pl_orbper",
@@ -217,7 +217,7 @@ def merge_tables(id, input_data, filepath=None):
 
     return data
 
-def query_archive(id, index=None, default=True, filepath=None, required_params=None, table_id='ps', save=True, overwrite=False):
+def query_archive(id, index=None, default=True, filepath=None, required_params=None, table_id='ps', save=True, overwrite=False, return_empty=False):
     if filepath is None:
         dirname = os.path.dirname(__file__)
         filepath = os.path.join(dirname, 'data_dump/archive_queries')
@@ -243,7 +243,7 @@ def query_archive(id, index=None, default=True, filepath=None, required_params=N
             all_data = NasaExoplanetArchive.query_criteria(table=table_id, select='*')
             # Filter for whole word matches
             matches = [row for row in all_data if _whole_word_match(str(row['hostname']), id)]
-            if len(matches) == 0:
+            if (len(matches) == 0) and not return_empty:
                 print(f"No results found for '{id}' in the archive.")
                 return None
             table_data = Table(rows=matches, names=all_data.colnames)
@@ -341,7 +341,7 @@ def setup_system(system_name, index=0, default=True, filepath=None,
     '''
     setup = System(system_name)
 
-    data = query_archive(system_name, index='all', default=False, filepath=filepath, table_id=table_id, save=save)
+    data = query_archive(system_name, index='all', default=False, filepath=filepath, table_id=table_id, save=save, return_empty=True)
     if data is None:
         print(f"Error: No data could be retrieved for system '{system_name}'.")
         return None
@@ -474,7 +474,7 @@ class Parameter:
 
 class ParameterContainer:
     '''
-    A class to manage parameters, with support for aliases and uncertainty suffixes.
+    A class to manage parameters, with support for aliases (and uncertainty suffixes???).
     Intended as a base class for object classes, e.g. Star, Planet.
     '''
     def __init__(self):
@@ -570,14 +570,16 @@ class ParameterContainer:
                 if np.isnan(value):
                     value = None
 
-                if uncertainty_dict is not None:
+                try:
                     upper = None
                     lower = None
-                else:
-                    upper = None
-                    lower = None
+                    if uncertainty_dict is not None:
+                        upper = np.abs(data[header + uncertainty_dict['upper']])
+                        lower = np.abs(data[header + uncertainty_dict['lower']])
+                except KeyError:
+                    print(f'{dict[key]} uncertainties not in data headers, skipping.')
 
-                self.set_param(key, value, upper, lower, aliases)
+                self.set_param(key, value, upper, lower, aliases[key])
             
             except KeyError:
                 print(f'{dict[key]} not in data headers, skipping.')
@@ -632,11 +634,11 @@ class System(ParameterContainer):
         self.add_planet(planet)
         return planet
 
-    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None):
+    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty_dict=exoarchive_uncertainties):
         star = Star()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        star.retrieve_params(data, star_params, uncertainty_suffixes, star_aliases)
+        star.retrieve_params(data, star_params, uncertainty_dict, star_aliases)
         retrieve_names(star, star_names, data)
 
         if star.name in [s.name for s in self.stars]:
@@ -646,11 +648,11 @@ class System(ParameterContainer):
         self.add_star(star)
         return star
 
-    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None):
+    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty_dict=exoarchive_uncertainties):
         planet = Planet()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        planet.retrieve_params(data, planet_params, uncertainty_suffixes, planet_aliases)
+        planet.retrieve_params(data, planet_params, uncertainty_dict, planet_aliases)
         retrieve_names(planet, planet_names, data)
 
         if planet.name in [p.name for p in self.planets]:
@@ -685,6 +687,63 @@ class System(ParameterContainer):
                 del object
             except ValueError:
                 print('Object not in system!')
+
+    def to_obsidian(self, filepath=None):
+        
+        yaml = f'\
+---\n\
+tags:\n\
+    - system\n\
+aliases: \n\
+n-stars: {len(self.stars)}\n\
+n-planets: {len(self.planets)}\n\
+n-candidates: \n\
+n-confirmed: \n\
+---\n\
+'
+
+        exoarchv = f'*[This system on Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/overview/{self.name})*\n'
+
+        info = '\n- \n\n\
+> [!paper] Relevant Papers\n\
+> - \n\
+## System\
+'
+
+        for star in self.stars:
+            info += f'\
+\n> [!star] {star.name}\n\
+> - **Spectral Type:** {star.spectral_type}\n\
+> - **Mass:** ${star.mass.value}^{{+{star.mass.upper}}}_{{-{star.mass.lower}}}$\n\
+> - **Radius:** ${star.radius.value}^{{+{star.radius.upper}}}_{{-{star.radius.lower}}}$\n\
+> - **Temperature:** ${star.temperature.value}^{{+{star.temperature.upper}}}_{{-{star.temperature.lower}}}$\n\
+> - **Metallicity:** ${star.metallicity.value}^{{+{star.metallicity.upper}}}_{{-{star.metallicity.lower}}}$ {star.metallicity_ratio}\n\
+> - **RA:** {star.rastr} / ${star.ra.value}$\n\
+> - **Dec:** {star.decstr} / ${star.dec.value}$\n\
+> - **Distance:** ${star.distance.value}^{{+{star.distance.upper}}}_{{-{star.distance.lower}}}$\n\
+'
+
+        for planet in self.planets:
+            info += f'\
+\n> [!planet] {planet.name}\n\
+> - **Period (days):** ${planet.period.value}^{{+{planet.period.upper}}}_{{-{planet.period.lower}}}$\n\
+> - **$t_0$ (days):** ${planet.time_of_midtransit.value}^{{+{planet.time_of_midtransit.upper}}}_{{-{planet.time_of_midtransit.lower}}}$\n\
+> - **Semimajor Axis (AU):** ${planet.semimajor_axis.value}^{{+{planet.semimajor_axis.upper}}}_{{-{planet.semimajor_axis.lower}}}$\n\
+> - **Mass ($\\text{{M}}_\oplus$):** ${planet.mass.value}^{{+{planet.mass.upper}}}_{{-{planet.mass.lower}}}$\n\
+> - **Radius ($\\text{{R}}_\oplus$):** ${planet.radius.value}^{{+{planet.radius.upper}}}_{{-{planet.radius.lower}}}$\n\
+> - **Equilibrium Temperature (K):** ${planet.temperature.value}^{{+{planet.temperature.upper}}}_{{-{planet.temperature.lower}}}$\n\
+> - **Insolation ($\\text{{S}}_\oplus$):** ${planet.insolation_flux.value}^{{+{planet.insolation_flux.upper}}}_{{-{planet.insolation_flux.lower}}}$\n\
+> - **Depth (%):** ${planet.depth.value}^{{+{planet.depth.upper}}}_{{-{planet.depth.lower}}}$\n\
+> - **Duration (hours):** ${planet.duration.value}^{{+{planet.duration.upper}}}_{{-{planet.duration.lower}}}$\n\
+> - **Impact Parameter:** ${planet.impact_parameter.value}^{{+{planet.impact_parameter.upper}}}_{{-{planet.impact_parameter.lower}}}$\n\
+'
+
+        text = yaml + exoarchv + info
+
+        filepath += f'/{self.name}.md'
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(text)
 
 # ---------------------------------------------------------------------------- #
 # Star class                                                                   #
@@ -723,3 +782,6 @@ class Planet(ParameterContainer):
                 self._aliases[alias] = std
                 for suffix in self._suffix_map:
                     self._aliases[f"{alias}{suffix}"] = f"{std}{suffix}"
+
+    def patch_data(self):
+        return

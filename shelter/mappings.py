@@ -27,6 +27,7 @@ planet_params = {
     "star_density": "st_dens",
     "ra": "ra",
     "dec": "dec",
+    "distance": "sy_dist",
 }
 
 planet_names = {
@@ -47,10 +48,15 @@ star_params = {
     "luminosity": "st_lum",
     "ra": "ra",
     "dec": "dec",
+    "distance": "sy_dist",
 }
 
 star_names = {
-    "name": "hostname",    
+    "name": "hostname",
+    "rastr": "rastr",
+    "decstr": "decstr", 
+    "metallicity_ratio": "st_metratio",
+    "spectral_type": "st_spectype",
 }
 
 planet_aliases = {
@@ -78,7 +84,8 @@ planet_aliases = {
     "star_density": ["rho_star"],
     "ra": ["RA"],
     "dec": ["DEC"],
-    "dispostion": ["disp"]
+    "distance": ["dist"], 
+    "dispostion": ["disp"],
 }
 
 star_aliases = {
@@ -90,10 +97,18 @@ star_aliases = {
     "luminosity": ["L", "L_star"],
     "ra": ["RA"],
     "dec": ["DEC"],
+    "distance": ["dist"],
+    "spectral_type": ["SpType"],
+    "metallicity_ratio": ["metratio"],
 }
 
 # Define uncertainty suffix aliases
 uncertainty_suffixes = {
-    "upper": ["u", "err1"],
-    "lower": ["l", "err2"],
+    "_upper": ["_u", "err1"],
+    "_lower": ["_l", "err2"],
+}
+
+exoarchive_uncertainties = {
+    "upper": "err1",
+    "lower": "err2",
 }
