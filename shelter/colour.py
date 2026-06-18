@@ -379,10 +379,15 @@ class Gradient:
     def __init__(self, colours, positions=None, interp_space='Oklab', cyclic_direction='near'):
         """
         Parameters:
-            colours (array-like of Colours): Set of Colour objects to create the gradient with.
-            positions (array-like of floats): Positions of the colour stops. Values must be defined between 0 and 1. By default colours will be spaced out equally.
-            interp_space (string): Colour space to interpolate the gradient within. Default is 'Oklab'.
-            cyclic_direction (string): How the gradient handles cyclic coordinates, e.g. hue in HSV. Choose from: 'near', 'far', 'clockwise', 'anticlockwise'. TODO
+        -----------
+            colours (array-like of Colours):
+                Set of Colour objects to create the gradient with.
+            positions (array-like of floats):
+                Positions of the colour stops. Values must be defined between 0 and 1. By default colours will be spaced out equally.
+            interp_space (string):
+                Colour space to interpolate the gradient within. Default is 'Oklab'.
+            cyclic_direction (string):
+                How the gradient handles cyclic coordinates, e.g. hue in HSV. Choose from: 'near', 'far', 'clockwise', 'anticlockwise'. TODO
         """
         n = len(colours)
         if n <= 1:
@@ -442,8 +447,11 @@ class Gradient:
         If position is None then the stop will be added in the centre of the largest gap, or at either end if 1 or fewer stops are present.
 
         Parameters:
-            colour (Colour): Colour object to assign to the stop.
-            position (float): Position of the colour stop. Value must be defined between 0 and 1.
+        -----------
+            colour (Colour):
+                Colour object to assign to the stop.
+            position (float):
+                Position of the colour stop. Value must be defined between 0 and 1.
         """
         if position == None:
             if self._nstops <= 1:
@@ -479,8 +487,12 @@ class Gradient:
         If neither is defined, the most recent stop added to the gradient will be removed.
 
         Parameters:
-            index (integer): Index of the colour stop to remove, ordered by position.
-            position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
+        -----------
+            index (integer):
+                Index of the colour stop to remove, ordered by position.
+            position (float):
+                Approximate position of the colour stop to remove.
+                Value must be defined between 0 and 1.
         """
         if index == None:
             if position == None:
@@ -501,9 +513,13 @@ class Gradient:
         If neither is defined, the most recent stop added to the gradient will be moved.
 
         Parameters:
+        -----------
             new_position (float): 
-            index (integer): Index of the colour stop to remove, ordered by position.
-            position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
+            index (integer):
+                Index of the colour stop to remove, ordered by position.
+            position (float):
+                Approximate position of the colour stop to remove.
+                Value must be defined between 0 and 1.
         """
 
     def edit_stop(self, new_colour, index=None, position=None):
@@ -514,6 +530,7 @@ class Gradient:
         If neither is defined, the most recent stop added to the gradient will be edited.
 
         Parameters:
+        -----------
             new_colour (Colour): 
             index (integer): Index of the colour stop to remove, ordered by position.
             position (float): Approximate position of the colour stop to remove. Value must be defined between 0 and 1.
@@ -542,13 +559,26 @@ class Gradient:
         Can either return values in a chosen colour space (more efficient) or Colour objects.
         
         Parameters:
-            start (float): Start point of sampling. Value must be defined between 0 and 1.
-            end (float): End point of sampling. Value must be defined between 0 and 1.
-            n_samples (integer): Number of points to sample at.
-            return_Colour (bool): Whether to return colours as Colour objects. Default False.
-            output_space (string): Colour space to return values in if return_Colour is False.
-            return_alpha (bool): If True and return_Colour is False, returned values will include an alpha channel. Default True.
-            clip (bool): If True, clips the output values between 0 and 1.
+            start : float
+                Start point of sampling.
+                Value must be defined between 0 and 1.
+            end : float
+                End point of sampling.
+                Value must be defined between 0 and 1.
+            n_samples : int
+                Number of points to sample at.
+            return_Colour (bool):
+                Whether to return colours as Colour objects.
+                Default False.
+            output_space (string):
+                Colour space to return values in if return_Colour is False.
+                Default 'sRGB'
+            return_alpha : bool, optional
+                If True and return_Colour is False, returned values will include an alpha channel.
+                Default True.
+            clip : bool, optional
+                If True, clips the output values between 0 and 1.
+                Default False
 
         Returns:
 
@@ -629,11 +659,16 @@ def k_means_clustering(data, n_clusters=8, n_runs=1, seed=None, **kwargs):
     Perform K-Means Clustering on a set of colour values, e.g. an image.
     
     Parameters:
-        data (array): 2D array of colour values to cluster.
-        n_clusters (int): Number of clusters to create.
-        n_runs (int): Number of runs of the algorithm to perform. The run with the lowest overall distance will be returned.
-        seed (int, or array-like of int): Random seed for the clustering. If None, will be random (resulting in a non-deterministic outcome).
-        Must be an array of length equal to n_runs if n_runs > 1.
+    -----------
+        data : array
+            2D array of colour values to cluster.
+        n_clusters : int
+            Number of clusters to create.
+        n_runs : int
+            Number of runs of the algorithm to perform. The run with the lowest overall distance will be returned.
+        seed : int, or array-like of int
+            Random seed for the clustering. If None, will be random (resulting in a non-deterministic outcome).
+            Must be an array of length equal to n_runs if n_runs > 1.
     """
     distances = []
     clusters = []
@@ -654,7 +689,9 @@ def mean_shift_clustering(data, quantile=0.1, n_samples=5000, bin_seeding=True, 
     Perform Mean-Shift Clustering on a set of colour values, e.g. an image.
     
     Parameters:
-        data (array): 2D array of colour values to cluster.
+    -----------
+        data : array
+            2D array of colour values to cluster.
     """
     #bandwidth = 0.08
     bandwidth = estimate_bandwidth(data, quantile=quantile, n_samples=n_samples)

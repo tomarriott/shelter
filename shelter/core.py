@@ -126,7 +126,7 @@ def merge_tables(id, input_data, filepath=None):
     if mission == 'TESS':
         file = 'shelter/data_dump/TOI list.csv'
         file_df = read_csv(file, skiprows=69)
-        file_df = file_df[file_df['tfopwg_disp'] != 'FP']
+        file_df = file_df[file_df['tfopwg_disp'] != ('FP' or 'FA')]
         file_df = file_df[np.round(file_df.toi.to_numpy(), 0) == int(id.lstrip('TOI-'))].reset_index()
 
         column_mapping = {
@@ -150,7 +150,7 @@ def merge_tables(id, input_data, filepath=None):
                           
         column_mapping.update({"ra": "ra",
             "dec": "dec",
-            "hostname": "toipfx",
+            "hostname": "tid",
             "pl_name": "toi",
         })
 
@@ -238,6 +238,7 @@ def query_archive(id, index=None, default=True, filepath=None, required_params=N
     if (not is_exist) or overwrite:
         # Try exact query first
         table_data = NasaExoplanetArchive.query_object(id, table=table_id)
+        '''
         if len(table_data) == 0:
             # If no results, try substring search
             all_data = NasaExoplanetArchive.query_criteria(table=table_id, select='*')
@@ -247,6 +248,7 @@ def query_archive(id, index=None, default=True, filepath=None, required_params=N
                 print(f"No results found for '{id}' in the archive.")
                 return None
             table_data = Table(rows=matches, names=all_data.colnames)
+        '''
         if save:
             ascii.write(table_data, file_loc, format='csv', overwrite=True)
         table = table_data
@@ -259,6 +261,8 @@ def query_archive(id, index=None, default=True, filepath=None, required_params=N
         except IndexError:
             print('No default parameter sets available')
             return None
+        except KeyError:
+            return table
 
     if index == 'latest':
         data = table[0]
@@ -410,7 +414,7 @@ def setup_system(system_name, index=0, default=True, filepath=None,
                 planet_obj.patch_data()
 
     # Create the star data after processing planets
-    setup.create_data_star(id=system_name, index=int(index if isinstance(index, int) else index[-1]), default=default, filepath=filepath)
+    setup.create_data_star(id=system_name, data=data[0], index=int(index if isinstance(index, int) else index[-1]), default=default, filepath=filepath)
 
     return setup
 
@@ -560,16 +564,17 @@ class ParameterContainer:
             ]
         return None
     
-    def retrieve_params(self, data, dict, uncertainty_dict=None, aliases=None):
+    def retrieve_params(self, data, dict, index=None, uncertainty_dict=None, aliases=None):
         for key in dict.keys():
             try:
                 header = dict[key]
                 value = data[header]
+                print(value)
                 if np.ma.is_masked(value):
                     value = np.array([value])[0]
                 if np.isnan(value):
                     value = None
-
+    
                 try:
                     upper = None
                     lower = None
@@ -638,8 +643,8 @@ class System(ParameterContainer):
         star = Star()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        star.retrieve_params(data, star_params, uncertainty_dict, star_aliases)
-        retrieve_names(star, star_names, data)
+        star.retrieve_params(data, exoarchive_star_params, 0, uncertainty_dict=uncertainty_dict, aliases=star_aliases)
+        retrieve_names(star, exoarchive_star_names, data)
 
         if star.name in [s.name for s in self.stars]:
             print(f'Warning: a star named {star.name} already exists in this system! Returning None')
@@ -652,8 +657,8 @@ class System(ParameterContainer):
         planet = Planet()
         if data is None:
             data = query_archive(id, index, default, filepath=filepath)
-        planet.retrieve_params(data, planet_params, uncertainty_dict, planet_aliases)
-        retrieve_names(planet, planet_names, data)
+        planet.retrieve_params(data, exoarchive_planet_params, uncertainty_dict=uncertainty_dict, aliases=planet_aliases)
+        retrieve_names(planet, exoarchive_planet_names, data)
 
         if planet.name in [p.name for p in self.planets]:
             return None
@@ -714,13 +719,13 @@ n-confirmed: \n\
             info += f'\
 \n> [!star] {star.name}\n\
 > - **Spectral Type:** {star.spectral_type}\n\
-> - **Mass:** ${star.mass.value}^{{+{star.mass.upper}}}_{{-{star.mass.lower}}}$\n\
-> - **Radius:** ${star.radius.value}^{{+{star.radius.upper}}}_{{-{star.radius.lower}}}$\n\
-> - **Temperature:** ${star.temperature.value}^{{+{star.temperature.upper}}}_{{-{star.temperature.lower}}}$\n\
+> - **Mass ($\\text{{M}}_\odot$):** ${star.mass.value}^{{+{star.mass.upper}}}_{{-{star.mass.lower}}}$\n\
+> - **Radius ($\\text{{R}}_\odot$):** ${star.radius.value}^{{+{star.radius.upper}}}_{{-{star.radius.lower}}}$\n\
+> - **Temperature (K):** ${star.temperature.value}^{{+{star.temperature.upper}}}_{{-{star.temperature.lower}}}$\n\
 > - **Metallicity:** ${star.metallicity.value}^{{+{star.metallicity.upper}}}_{{-{star.metallicity.lower}}}$ {star.metallicity_ratio}\n\
 > - **RA:** {star.rastr} / ${star.ra.value}$\n\
 > - **Dec:** {star.decstr} / ${star.dec.value}$\n\
-> - **Distance:** ${star.distance.value}^{{+{star.distance.upper}}}_{{-{star.distance.lower}}}$\n\
+> - **Distance (pc):** ${star.distance.value}^{{+{star.distance.upper}}}_{{-{star.distance.lower}}}$\n\
 '
 
         for planet in self.planets:

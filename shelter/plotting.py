@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from .utils import extract_kwargs
-from .data import bin_data
+from .data import bin_data, fold_data
 from .io import get_directory, find_path
 
 def use_custom_styles():
@@ -14,6 +14,19 @@ def use_custom_styles():
 ################################################################################
 # - PLOTTING DATA ------------------------------------------------------------ #
 ################################################################################
+
+def plot_axes(func, *args, save=False, save_path='', **kwargs):
+    fig = plt.figure()
+    ax = fig.subplots()
+
+    ax = func(ax, *args)
+
+    if not save:
+        plt.show()
+
+    if save:
+        savefig_args = extract_kwargs(plt.savefig, kwargs)
+        plt.savefig(save_path, **savefig_args)
 
 # ---------------------------------------------------------------------------- #
 # Lightcurve plotting                                                          #
@@ -43,27 +56,18 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, data_err
     return ax
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=True, save=False, save_path=None, **kwargs):
-    fig = plt.figure()
-    ax = fig.subplots()
-
-    ax = ax_lightcurve(ax, t, y, yerr, transit_times, plot_bin, **kwargs)
-
-    if not save:
-        plt.show()
-
-    if save:
-        savefig_args = extract_kwargs(plt.savefig, kwargs)
-
-        if save_path == None:
-            dirname = get_directory()
-            save_path = os.path.join(dirname, 'lightcurve.png')
-        plt.savefig(save_path, **savefig_args)
+    if save_path == None:
+        dirname = get_directory()
+        save_path = os.path.join(dirname, 'lightcurve.png')
+        
+    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin, save=save, save_path=save_path, **kwargs)
 
 # ---------------------------------------------------------------------------- #
 # Phasefold plotting                                                           #
 # ---------------------------------------------------------------------------- #
 
-
+def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, ):
+    return
 
 # ---------------------------------------------------------------------------- #
 # Histograms                                                                   #
@@ -114,3 +118,72 @@ def ax_stacked_histogram(ax, x, y, xlims=None, ylims=None, xbins=40, ybins=40, c
     print(sum(bottom))
     
     return ax
+
+# ---------------------------------------------------------------------------- #
+# Periodograms                                                                 #
+# ---------------------------------------------------------------------------- #
+
+def ax_TLS_spectrum(ax, tls_results, planet=None):
+    vline_colour = '#40a1a1'
+
+    if planet is not None:
+        if (tls_results.period >= planet.period.value - 0.01) and (tls_results.period <= planet.period.value + 0.01):
+            vline_colour = '#40a140'
+        else:
+            planet_colour = '#f04f4f'
+            ax.axvline(planet.period.value, alpha=0.4, lw=3, c=planet_colour)
+    
+    ax.axvline(tls_results.period, alpha=0.4, lw=3, c=vline_colour)
+    
+    for n in range(2, 10):
+        ax.axvline(n*tls_results.period, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
+        ax.axvline(tls_results.period / n, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
+        
+    ax.plot(tls_results.periods, tls_results.power, color='black', lw=0.5)
+
+    ax.set_ylabel(r'SDE')
+    ax.set_xlabel('Period (days)')
+    ax.set_xlim(np.min(tls_results.periods), np.max(tls_results.periods))
+    ax.set_title('TransitLeastSquares Power Spectrum')
+
+    return ax
+
+def plot_TLS_spectrum(tls_results, planet=None, save=False, save_path=None, **kwargs):
+    if save_path == None:
+        dirname = get_directory()
+        save_path = os.path.join(dirname, 'TLS_spectrum.png')
+
+    plot_axes(ax_TLS_spectrum, tls_results, planet, save=save, save_path=save_path, **kwargs)
+
+def ax_BLS_spectrum(ax, bls_results, planet=None):
+    vline_colour = '#40a1a1'
+    result_period = bls_results.period[np.argmax(bls_results.power)].value
+    
+    if planet is not None:
+        if (result_period >= planet.period.value - 0.01) and (result_period <= planet.period.value + 0.01):
+            vline_colour = '#40a140'
+        else:
+            planet_colour = '#f04f4f'
+            ax.axvline(planet.period.value, alpha=0.4, lw=3, c=planet_colour)
+    
+    ax.axvline(result_period, alpha=0.4, lw=3, c=vline_colour)
+    
+    for n in range(2, 10):
+        ax.axvline(n*result_period, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
+        ax.axvline(result_period / n, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
+
+    ax.plot(bls_results.period.value, bls_results.power, color='black', lw=0.5)
+
+    ax.set_ylabel(r'SDE')
+    ax.set_xlabel('Period (days)')
+    ax.set_xlim(np.min(bls_results.period.value), np.max(bls_results.period.value))
+    ax.set_title('BoxLeastSquares Power Spectrum')
+
+    return ax
+
+def plot_BLS_spectrum(bls_results, planet=None, save=False, save_path=None, **kwargs):
+    if save_path == None:
+        dirname = get_directory()
+        save_path = os.path.join(dirname, 'BLS_spectrum.png')
+
+    plot_axes(ax_BLS_spectrum, bls_results, planet, save=save, save_path=save_path, **kwargs)

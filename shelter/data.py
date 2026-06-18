@@ -10,7 +10,7 @@ from .utils import to_list_of_arrays, get_epoch
 
 # Merge RV and LC classes
 # TODO: Make these dataclasses?
-class DataContainer:
+class TimeSeries:
     def __init__(self, t, y, e=[], instrument='none'):
 
         if len(t) != len(y):
@@ -49,22 +49,52 @@ class DataContainer:
 # Lightcurve class                                                             #
 # ---------------------------------------------------------------------------- #
 
-class LightCurve(DataContainer):
-    def __init__(self, t, y, e=[], instrument='none', cadence=None):
+class LightCurve(TimeSeries):
+    def __init__(self, t, y, e=[], instrument='none', cadence=None, sector=None):
         super().__init__(t, y, e, instrument)
+
+        if cadence is None:
+            cadence = int((t[1] - t[0]) * (3600 * 24))
         self.cadence = cadence
+        self.sector = sector
 
     def __repr__(self):
-        return f"LightCurve(N_points={self.N}, Instrument={self.instrument}, t={self.t}, y={self.y}, e='{self.e})"
+        return f"LightCurve(N={self.N}, instrument={self.instrument}, t={self.t}, y={self.y}, e='{self.e})"
 
     def to_lightkurve(self, **kwargs):
         return to_lightkurve(self, **kwargs)
+    
+    def flatten(self, window, function='wotan', **kwargs):
+        
+        if isinstance(window, float) or isinstance(window, int):
+            window = [window]
+            single = True
+        
+        # object to store lightcurves in if multiple window lengths ---------- #
+        return_obj = DataCollection()
+
+        if function == 'wotan':
+            try:
+                import wotan
+            except ImportError:
+                print('Wotan is not installed! Using [method] for now.')
+
+            for wind in window:
+                y_flat = wotan.flatten(self.t, self.y, window=wind)
+                return_obj.add_data(LightCurve(self.t, y_flat, self.e, self.instrument, self.cadence))
+
+        if single:
+            return return_obj[0]
+        return return_obj
+    
+    def mask_transits(self, ):
+        return
 
 # ---------------------------------------------------------------------------- #
 # Radial velocity class                                                        #
 # ---------------------------------------------------------------------------- #
 
-class RadialVelocity(DataContainer):
+class RadialVelocity(TimeSeries):
     def __init__(self, t, y, e=[], instrument='none'):
         super().__init__(t, y, e, instrument)
 
@@ -77,15 +107,62 @@ class RadialVelocity(DataContainer):
 
 class DataCollection:
     def __init__(self, data=[]):
-        self.data = data
-        self.instruments = [datum.instrument for datum in data]
+        if not isinstance(data, list):
+            data = [data]
+
+        self.data = []
+        for datum in data:
+            self.data.append(datum)
 
     def __repr__(self):
-        return f"DataCollection()"
+        return f"DataCollection({[datum for datum in self.data]})"
     
-    def add_data(self, data):
-        self.data.append(data)
-        self.instruments.append(data.instrument)
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        if isinstance(index, (int, np.integer)):
+            return self.data[index]
+        elif isinstance(id, slice):
+            return type(self)(self.data[idx])
+        
+        elif all([isinstance(i, (bool, np.bool_)) for i in index]):
+            if len(index) != len(self.data):
+                raise IndexError(
+                    f"boolean index did not match indexed array; dimension is {len(self.data)} "
+                    f"but corresponding boolean dimension is {len(index)}"
+                )
+            return type(self)([self.data[i] for i in np.nonzero(index)[0]])
+        elif all([isinstance(i, (int, np.integer)) for i in index]):
+            # case int array like, follow ndarray behavior
+            return type(self)([self.data[i] for i in index])
+        else:
+            raise IndexError(
+                "only integers, slices (`:`) and integer or boolean arrays are valid indices"
+            )
+        
+    def __setitem__(self, index, item):
+        self.data[index] = item
+
+    def append(self, item):
+        self.data.append(item)
+
+    def _get_data_attr(self, attribute):
+        """Get attribute from internal data from a call of DataCollection.attribute"""
+        return np.array([getattr(datum, attribute, np.nan) for datum in self.data])
+    
+    # Properties accessed from internal data --------------------------------- #
+    @property
+    def instrument(self):
+        return self._get_data_attr("instrument")
+    
+    @property
+    def cadence(self):
+        return self._get_data_attr("cadence")
+    
+    @property
+    def sector(self):
+        return self._get_data_attr("sector")
 
 # ---------------------------------------------------------------------------- #
 # Helper functions                                                             #
@@ -102,7 +179,10 @@ def to_lightkurve(lc, **kwargs):
 
 
 def from_lightkurve(lc):
-    return LightCurve(lc.time, lc.flux, lc.flux_err)
+    t = lc.time.value  # in days
+    y = lc.flux.value
+    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
+    return LightCurve(t, y, e)
 
 
 # TODO: this was written by Claude - rewrite properly. although it works nicely
@@ -617,7 +697,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
         Whether to download lightcurves if a lightcurve for this system already exists in lc_directory.
         If false, the saved lightcurve will always be loaded, even if other kwargs are different.
     save_format : string, optional, {'pickle', 'csv', 'dat', 'txt', 'fits'}
-        Format the save the 
+        Format to save the 
     system : shelter.system, optional
         A shelter System() object.
         If provided, any attached planet objects can be used to mask transits prior to saving, to reduce file size.

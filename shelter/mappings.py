@@ -2,7 +2,7 @@
 # - DICTIONARIES ------------------------------------------------------------- #
 ################################################################################
 
-planet_params = {
+exoarchive_planet_params = {
     "semiamplitude": "pl_rvamp",
     "semimajor_axis": "pl_orbsmax",
     "scaled_semimajor_axis": "pl_ratdor",
@@ -30,7 +30,7 @@ planet_params = {
     "distance": "sy_dist",
 }
 
-planet_names = {
+exoarchive_planet_names = {
     "star_name": "hostname",
     "name": "pl_name",
     "letter": "pl_letter",
@@ -39,7 +39,7 @@ planet_names = {
     "disposition": "disposition",
 }
 
-star_params = {
+exoarchive_star_params = {
     "temperature": "st_teff",
     "radius": "st_rad",
     "mass": "st_mass",
@@ -51,7 +51,7 @@ star_params = {
     "distance": "sy_dist",
 }
 
-star_names = {
+exoarchive_star_names = {
     "name": "hostname",
     "rastr": "rastr",
     "decstr": "decstr", 

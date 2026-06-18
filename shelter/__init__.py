@@ -4,5 +4,10 @@ from . import data
 from . import io
 from . import plotting
 from . import mappings
-from . import search
+
+try:
+    from . import search
+except ImportError:
+    print('transitleastsquares not installed! Disabling shelter.search')
+
 from . import utils
