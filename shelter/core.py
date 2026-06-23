@@ -569,7 +569,6 @@ class ParameterContainer:
             try:
                 header = dict[key]
                 value = data[header]
-                print(value)
                 if np.ma.is_masked(value):
                     value = np.array([value])[0]
                 if np.isnan(value):

@@ -15,11 +15,13 @@ def use_custom_styles():
 # - PLOTTING DATA ------------------------------------------------------------ #
 ################################################################################
 
-def plot_axes(func, *args, save=False, save_path='', **kwargs):
-    fig = plt.figure()
+def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', **kwargs):
+    fig = plt.figure(figsize=figsize)
     ax = fig.subplots()
 
     ax = func(ax, *args)
+
+    fig.tight_layout()
 
     if not save:
         plt.show()
@@ -33,10 +35,10 @@ def plot_axes(func, *args, save=False, save_path='', **kwargs):
 # ---------------------------------------------------------------------------- #
 
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, data_errorbar_args={}, bin_errorbar_args={}, **kwargs):
-    if ax == None:
+    if ax is None:
         ax = plt.axes()
 
-    if yerr == None:
+    if yerr is None:
         yerr = np.zeros(np.shape(y))
     
     ax.errorbar(t, y, yerr=yerr, ms=1, ls='none', c='#f04f4f', fmt='o', mfc='#f04f4f', mec='#4f2020', alpha=0.5, zorder=2, **data_errorbar_args)
@@ -55,19 +57,24 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=True, data_err
 
     return ax
 
-def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=True, save=False, save_path=None, **kwargs):
-    if save_path == None:
+def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=True, figsize=(10, 6), save=False, save_path=None, **kwargs):
+    if save_path is None:
         dirname = get_directory()
         save_path = os.path.join(dirname, 'lightcurve.png')
         
-    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin, save=save, save_path=save_path, **kwargs)
+    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin, figsize=figsize, save=save, save_path=save_path, **kwargs)
 
 # ---------------------------------------------------------------------------- #
 # Phasefold plotting                                                           #
 # ---------------------------------------------------------------------------- #
 
-def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, ):
-    return
+def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True, bin_data_args={}, data_errorbar_args={}, bin_errorbar_args={}, **kwargs):
+    ax = ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin,
+                        data_errorbar_args=data_errorbar_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+
+    ax.set_xlabel('Phase')
+    
+    return ax
 
 # ---------------------------------------------------------------------------- #
 # Histograms                                                                   #
@@ -148,12 +155,12 @@ def ax_TLS_spectrum(ax, tls_results, planet=None):
 
     return ax
 
-def plot_TLS_spectrum(tls_results, planet=None, save=False, save_path=None, **kwargs):
+def plot_TLS_spectrum(tls_results, planet=None, figsize=(10, 6), save=False, save_path=None, **kwargs):
     if save_path == None:
         dirname = get_directory()
         save_path = os.path.join(dirname, 'TLS_spectrum.png')
 
-    plot_axes(ax_TLS_spectrum, tls_results, planet, save=save, save_path=save_path, **kwargs)
+    plot_axes(ax_TLS_spectrum, tls_results, planet, figsize=figsize, save=save, save_path=save_path, **kwargs)
 
 def ax_BLS_spectrum(ax, bls_results, planet=None):
     vline_colour = '#40a1a1'
@@ -181,9 +188,9 @@ def ax_BLS_spectrum(ax, bls_results, planet=None):
 
     return ax
 
-def plot_BLS_spectrum(bls_results, planet=None, save=False, save_path=None, **kwargs):
+def plot_BLS_spectrum(bls_results, planet=None, figsize=(10, 6), save=False, save_path=None, **kwargs):
     if save_path == None:
         dirname = get_directory()
         save_path = os.path.join(dirname, 'BLS_spectrum.png')
 
-    plot_axes(ax_BLS_spectrum, bls_results, planet, save=save, save_path=save_path, **kwargs)
+    plot_axes(ax_BLS_spectrum, bls_results, planet, figsize=figsize, save=save, save_path=save_path, **kwargs)
