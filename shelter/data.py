@@ -49,10 +49,13 @@ class TimeSeries:
             )
 
     def append(self, t, y, e=[]):
-        self.t = np.append(self.t, t)
-        self.y = np.append(self.y, y)
+        if len(t) != len(y):
+            raise ValueError('t and y must be same size')
+
+        self.t = np.append(self.t, np.asanyarray(t))
+        self.y = np.append(self.y, np.asanyarray(y))
         if len(e) != len(y):
-            e = np.pad(e, (np.std(y), len(y) - len(e))).reshape(len(y))
+            e = np.pad(np.asanyarray(e), (np.std(y), len(y) - len(e))).reshape(len(y))
         self.e = np.append(self.e, e)
 
     def order_data(self):
@@ -635,12 +638,12 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                         if isinstance(select, int):
                             lc_collection = [lc_collection]
 
-                        if np.any(lc_collection.flux) is None or np.any(lc_collection.flux_err) is None:
-                            print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
-
                         for lc in lc_collection:
                             sector = getattr(lc, sector_keys[mission])
                             lc = lc.remove_nans()
+
+                            if np.any(lc.flux is None) or np.any(lc.flux_err is None):
+                                print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
 
                             # Mask transits ---------------------------------- #
                             if (system is not None) and mask_transits:
@@ -682,11 +685,10 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
 
                 # Resolve the target and find available sectors -------------- #
                 try:
-                    star = eleanor.Source(name=system_name, auto_submit=False)
-                    sectors_available = star.sectors
+                    sectors_available = eleanor_observed_sectors(name=system_name, sectors='all')
                 except Exception as exc:
-                    print(f"eleanor could not resolve {system_name}: {exc}")
                     sectors_available = []
+                    print(f"eleanor could not resolve {system_name}: {exc}")
 
                 epoch = get_epoch('TESS')
 
@@ -694,8 +696,12 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                 if fill_gaps:
                     sectors_downloaded = []
                     for instrument in data.keys():
-                        for sector in instrument.keys():
+                        for sector in data[instrument].keys():
                             sectors_downloaded.append(sector)
+
+                    print(sectors_available)
+                    print(sectors_downloaded)
+                    
                     sectors_downloaded = set(sectors_downloaded)
                     sectors_available = [sector for sector in sectors_available if sector not in sectors_downloaded]
 
@@ -707,7 +713,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                     for sector in sectors_available:
                         try:
                             star_sector = eleanor.Source(
-                                name=system_name, sector=sector, auto_submit=False
+                                name=system_name, sector=sector
                             )
                             datum = eleanor.TargetData(
                                 star_sector,
@@ -807,3 +813,34 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
         print("No lightcurves found?")
         return None
     return collections
+
+def eleanor_observed_sectors(sectors, tic=None, gaia=None, coords=None, name=None):
+    '''Poached from eleanor - essentially just eleanor.multisectors but it returns the observed sectors instead. So no need for unnecessary downloads.'''
+    from eleanor.mast import coords_from_tic, coords_from_gaia, coords_from_name
+    from eleanor.maxsector import maxsector
+    from tess_stars2px import tess_stars2px_function_entry as tess_stars2px
+    from astropy.coordinates import SkyCoord
+    import warnings
+
+    if sectors == 'all':
+        if coords is None:
+            if tic is not None:
+                coords, _, _, _ = coords_from_tic(tic)
+            elif gaia is not None:
+                coords = coords_from_gaia(gaia)
+            elif name is not None:
+                coords = coords_from_name(name)
+
+        if coords is not None:
+            if type(coords) is SkyCoord:
+                coords = (coords.ra.degree, coords.dec.degree)
+            result = tess_stars2px(8675309, coords[0], coords[1])
+            sector = result[3][result[3] < maxsector + 0.5]
+            sectors = sector.tolist()
+
+        if len(sectors) == 0 or sectors[0] < 0:
+            raise Exception("Your target is not observed by TESS, or maybe you need to run eleanor.Update()")
+        else:
+            print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors))
+
+        return sectors

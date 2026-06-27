@@ -398,7 +398,7 @@ def setup_system(system_name, index=0, default=True, filepath=None,
                 nstar = np.array([nstar])[0]
             nstars.append(nstar)
             nplanets += 1
-            planet_obj = setup.create_data_planet(data=planet_data)
+            planet_obj = setup.create_planet(data=planet_data)
             if planet_obj:
                 if hasattr(planet_obj, 'patch_data'):
                     planet_obj.patch_data()
@@ -409,12 +409,12 @@ def setup_system(system_name, index=0, default=True, filepath=None,
     if table_id == 'pscomppars':
         df = data.to_pandas().sort_values(by='pl_orbper')
         for _, planet_data in df.iterrows():
-            planet_obj = setup.create_data_planet(data=planet_data)
+            planet_obj = setup.create_planet(data=planet_data)
             if planet_obj and hasattr(planet_obj, 'patch_data'):
                 planet_obj.patch_data()
 
     # Create the star data after processing planets
-    setup.create_data_star(id=system_name, data=data[0], index=int(index if isinstance(index, int) else index[-1]), default=default, filepath=filepath)
+    setup.create_star(id=system_name, data=data[0], index=int(index if isinstance(index, int) else index[-1]), default=default, filepath=filepath)
 
     return setup
 
@@ -564,7 +564,7 @@ class ParameterContainer:
             ]
         return None
     
-    def retrieve_params(self, data, dict, index=None, uncertainty_dict=None, aliases=None):
+    def retrieve_params(self, data, dict, index=None, uncertainty_dict=None, uncertainty='suffix', aliases=None):
         for key in dict.keys():
             try:
                 header = dict[key]
@@ -578,15 +578,30 @@ class ParameterContainer:
                     upper = None
                     lower = None
                     if uncertainty_dict is not None:
-                        upper = np.abs(data[header + uncertainty_dict['upper']])
-                        lower = np.abs(data[header + uncertainty_dict['lower']])
+                        if uncertainty == 'suffix':
+                            upper = np.abs(data[header + uncertainty_dict['upper']])
+                            lower = np.abs(data[header + uncertainty_dict['lower']])
+                        if uncertainty == 'prefix':
+                            upper = np.abs(data[uncertainty_dict['upper'] + header])
+                            lower = np.abs(data[uncertainty_dict['lower'] + header])
                 except KeyError:
-                    print(f'{dict[key]} uncertainties not in data headers, skipping.')
+                    print(f'{header} uncertainties not in data headers, skipping.')
 
                 self.set_param(key, value, upper, lower, aliases[key])
             
             except KeyError:
-                print(f'{dict[key]} not in data headers, skipping.')
+                print(f'{header} not in data headers, skipping.')
+                continue
+
+    def retrieve_names(self, data, dict, index=None):
+        for key in dict.keys():
+            try:
+                header = dict[key]
+                value = data[header]
+                
+                setattr(self, key, value)
+            except KeyError:
+                print(f'{header} not in data headers, skipping.')
                 continue
 
     def __repr__(self):
@@ -611,60 +626,6 @@ class System(ParameterContainer):
         self.planets.append(planet)
         planet.system = self
 
-    def create_custom_star(self, data, uncertainty_dict=None):
-        star = Star(data.get("name", "Unnamed Star"))
-        for key, value in data.items():
-            star.set_param(key, value)
-
-        if star.name in [s.name for s in self.stars]:
-            return None
-
-        self.add_star(star)
-        return star
-    
-        # TODO: replace code in create_custom_ calls with a unified function for all ParameterContainers
-        # maybe merge this with create_data calls too - have it go through retrieve_params, and only rely on dictionaries (or just make it agnostic to dicts or tables)
-        # needs to be able to handle uncertainty dicts with both prefixes and suffixes
-
-    def create_custom_planet(self, data, uncertainty_dict=None):
-        planet = Planet(data.get("name", "Unnamed Planet"))
-        for key, value in data.items():
-            planet.set_param(key, value)
-
-        if planet.name in [p.name for p in self.planets]:
-            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
-            return None
-
-        self.add_planet(planet)
-        return planet
-
-    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty_dict=exoarchive_uncertainties):
-        star = Star()
-        if data is None:
-            data = query_archive(id, index, default, filepath=filepath)
-        star.retrieve_params(data, exoarchive_star_params, 0, uncertainty_dict=uncertainty_dict, aliases=star_aliases)
-        retrieve_names(star, exoarchive_star_names, data)
-
-        if star.name in [s.name for s in self.stars]:
-            print(f'Warning: a star named {star.name} already exists in this system! Returning None')
-            return None
-
-        self.add_star(star)
-        return star
-
-    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty_dict=exoarchive_uncertainties):
-        planet = Planet()
-        if data is None:
-            data = query_archive(id, index, default, filepath=filepath)
-        planet.retrieve_params(data, exoarchive_planet_params, uncertainty_dict=uncertainty_dict, aliases=planet_aliases)
-        retrieve_names(planet, exoarchive_planet_names, data)
-
-        if planet.name in [p.name for p in self.planets]:
-            return None
-
-        self.add_planet(planet)
-        return planet
-    
     def delete_object(self, name=None, object=None):
         if name is not None:
             try:
@@ -692,6 +653,104 @@ class System(ParameterContainer):
             except ValueError:
                 print('Object not in system!')
 
+    def create_custom_star(self, data, uncertainty_dict=None):
+        '''to be deprecated'''
+        star = Star(data.get("name", "Unnamed Star"))
+        for key, value in data.items():
+            star.set_param(key, value)
+
+        if star.name in [s.name for s in self.stars]:
+            return None
+
+        self.add_star(star)
+        return star
+    
+        # TODO: replace code in create_custom_ calls with a unified function for all ParameterContainers
+        # maybe merge this with create_data calls too - have it go through retrieve_params, and only rely on dictionaries (or just make it agnostic to dicts or tables)
+        # needs to be able to handle uncertainty dicts with both prefixes and suffixes
+
+    def create_custom_planet(self, data, uncertainty_dict=None):
+        '''to be deprecated'''
+        planet = Planet(data.get("name", "Unnamed Planet"))
+        for key, value in data.items():
+            planet.set_param(key, value)
+
+        if planet.name in [p.name for p in self.planets]:
+            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+            return None
+
+        self.add_planet(planet)
+        return planet
+
+    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None,
+                         params_dict=exoarchive_star_params, names_dict=exoarchive_star_names, uncertainty_dict=exoarchive_uncertainties):
+        '''to be deprecated'''
+        star = Star()
+        if data is None:
+            data = query_archive(id, index, default, filepath=filepath)
+        star.retrieve_params(data, params_dict, 0, uncertainty_dict=uncertainty_dict, aliases=star_aliases)
+        star.retrieve_names(data, names_dict, 0)
+
+        if star.name in [s.name for s in self.stars]:
+            print(f'Warning: a star named {star.name} already exists in this system! Returning None')
+            return None
+
+        self.add_star(star)
+        return star
+
+    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None,
+                           params_dict=exoarchive_planet_params, names_dict=exoarchive_planet_names, uncertainty_dict=exoarchive_uncertainties):
+        '''to be deprecated'''
+        planet = Planet()
+        if data is None:
+            data = query_archive(id, index, default, filepath=filepath)
+        planet.retrieve_params(data, params_dict, uncertainty_dict=uncertainty_dict, aliases=planet_aliases)
+        planet.retrieve_names(data, names_dict, 0)
+
+        if planet.name in [p.name for p in self.planets]:
+            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+            return None
+
+        self.add_planet(planet)
+        return planet
+    
+    def create_star(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix',
+                    param_dict=exoarchive_star_params, name_dict=exoarchive_star_names, uncertainty_dict=exoarchive_uncertainties):
+        star = Star()
+        if data is None:
+            data = query_archive(id, index, default, filepath=filepath)
+        star.retrieve_params(data, param_dict, 0, uncertainty_dict=uncertainty_dict, uncertainty=uncertainty, aliases=star_aliases)
+        star.retrieve_names(data, name_dict, 0)
+
+        if star.name in [s.name for s in self.stars]:
+            print(f'Warning: a star named {star.name} already exists in this system! Returning None')
+            return None
+
+        self.add_star(star)
+        return star
+
+    def create_planet(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix',
+                      param_dict=exoarchive_planet_params, name_dict=exoarchive_planet_names, uncertainty_dict=exoarchive_uncertainties):
+        planet = Planet()
+        if data is None:
+            data = query_archive(id, index, default, filepath=filepath)
+        planet.retrieve_params(data, param_dict, 0, uncertainty_dict=uncertainty_dict, uncertainty=uncertainty, aliases=planet_aliases)
+        planet.retrieve_names(data, name_dict, 0)
+
+        if planet.name in [p.name for p in self.planets]:
+            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+            return None
+
+        self.add_planet(planet)
+        return planet
+
+    # Wrappers for other functions ------------------------------------------- #
+    def get_lightcurve(self, lc_directory, missions, **kwargs):
+        from .data import get_lightcurve
+        self.lc = get_lightcurve(self.name, lc_directory, missions, system=self, **kwargs)
+        return self.lc
+
+    # Conveniences ----------------------------------------------------------- #
     def to_obsidian(self, filepath=None):
         
         yaml = f'\
