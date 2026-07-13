@@ -1,4 +1,5 @@
 import os
+import traceback
 #import math
 import string
 import numpy as np
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from .io import *
 from .mappings import *
+from .search import active_searches
 
 # for testing
 import time
@@ -452,6 +454,12 @@ class Parameter:
         if distribution is not None:
             self.distribution = distribution
 
+        if upper is not None and lower is None:
+            self.lower = upper
+
+        if lower is not None and upper is None:
+            self.upper = lower
+
     @property
     def distribution(self):
         return self._distribution
@@ -564,8 +572,13 @@ class ParameterContainer:
             ]
         return None
     
-    def retrieve_params(self, data, dict, index=None, uncertainty_dict=None, uncertainty='suffix', aliases=None):
-        for key in dict.keys():
+    def retrieve_params(self, data, dict=None, index=None, uncertainty_dict=None, uncertainty='suffix', aliases=None):
+        if dict is None:
+            keychain = data.keys()
+        else:
+            keychain = dict.keys()
+
+        for key in keychain:
             try:
                 header = dict[key]
                 value = data[header]
@@ -592,9 +605,18 @@ class ParameterContainer:
             except KeyError:
                 print(f'{header} not in data headers, skipping.')
                 continue
+            except Exception:
+                print(f'Something went wrong when processing {header}, skipping.')
+                traceback.print_exc()
+                continue
 
-    def retrieve_names(self, data, dict, index=None):
-        for key in dict.keys():
+    def retrieve_names(self, data, dict=None, index=None):
+        if dict is None:
+            keychain = data.keys()
+        else:
+            keychain = dict.keys()
+
+        for key in keychain:
             try:
                 header = dict[key]
                 value = data[header]
@@ -744,11 +766,20 @@ class System(ParameterContainer):
         self.add_planet(planet)
         return planet
 
-    # Wrappers for other functions ------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    # Wrappers for other functions                                             #
+    # ------------------------------------------------------------------------ #
+
+    # Lightcurves ------------------------------------------------------------ #
     def get_lightcurve(self, lc_directory, missions, **kwargs):
         from .data import get_lightcurve
         self.lc = get_lightcurve(self.name, lc_directory, missions, system=self, **kwargs)
         return self.lc
+    
+    # Transit search --------------------------------------------------------- #
+    if active_searches['TLS']:
+        def search_TLS(self):
+            pass
 
     # Conveniences ----------------------------------------------------------- #
     def to_obsidian(self, filepath=None):

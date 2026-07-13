@@ -1,7 +1,5 @@
 from shelter import setup_system
 
-
-
 def create_system_page(system_name, filepath, **kwargs):
     system = setup_system(system_name, candidate_data=False, table_id='pscomppars', **kwargs)
     system.to_obsidian(filepath)

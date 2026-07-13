@@ -1,6 +1,7 @@
 import os.path
 import numpy as np
 from .utils import to_list_of_arrays, get_epoch
+import traceback
 # from dataclasses import dataclass, field
 
 ################################################################################
@@ -18,7 +19,7 @@ class TimeSeries:
         self.t = np.asanyarray(t)
         self.y = np.asanyarray(y)
         if len(e) != len(y):
-            e = np.pad(e, (np.std(y), len(y) - len(e))).reshape(len(y))
+            e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=np.std(y)).reshape(len(y))
         self.e = e
 
         self.N = len(t)
@@ -77,6 +78,26 @@ class TimeSeries:
     
     def to_juliet(self):
         return ({self.instrument: self.t}, {self.instrument: self.y}, {self.instrument: self.e})
+    
+    def plot(self, **kwargs):
+        from .plotting import plot_lightcurve
+
+        plot_lightcurve(self.t, self.y, self.e, **kwargs)
+
+    def ax_plot(self, ax, **kwargs):
+        from .plotting import ax_lightcurve
+
+        return ax_lightcurve(ax, self.t, self.y, self.e, **kwargs)
+    
+    def plot_fold(self, period, t0=None, **kwargs):
+        from .plotting import plot_phasefold
+
+        plot_phasefold(self.t, self.y, self.e, period, t0, **kwargs)
+
+    def ax_fold(self, ax, period, t0=None, **kwargs):
+        from .plotting import ax_phasefold
+
+        return ax_phasefold(ax, self.t, self.y, self.e, period, t0, **kwargs)
 
 # ---------------------------------------------------------------------------- #
 # Lightcurve class                                                             #
@@ -203,6 +224,11 @@ class DataCollection:
         y = np.hstack([datum.y for datum in self.data])
         e = np.hstack([datum.e for datum in self.data])
         return type(self.data[0])(*order_data(t, y, e), self.data[0].instrument)
+    
+    def order_data(self):
+        if hasattr('sector'):
+            pass
+            
 
 # ---------------------------------------------------------------------------- #
 # Helper functions                                                             #
@@ -378,16 +404,16 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method='m
                 y_err_centre = np.std(y_bin) / np.sqrt(n)
 
             else:
-                weights  = 1.0 / err_bin**2
+                weights      = 1.0 / err_bin**2
                 w_sum        = weights.sum()
                 t_centre     = np.sum(weights * t_bin) / w_sum
                 y_centre     = np.sum(weights * y_bin) / w_sum
-                # Uncertainty: sqrt(1 / sum(w_i))  – standard error of weighted mean
+                # Uncertainty: sqrt(1 / sum(w_i))  - standard error of weighted mean
                 y_err_centre = np.sqrt(1.0 / w_sum)
 
         else:  # median
-            t_centre     = t_bin.mean()          # simple mean of times
-            y_centre     = np.median(y_bin)
+            t_centre         = t_bin.mean()          # simple mean of times
+            y_centre         = np.median(y_bin)
             # Robust uncertainty: 1.4826 * MAD / sqrt(N)
             # Falls back to mean(yerr)/sqrt(N) when N == 1
             if n > 1:
@@ -424,21 +450,104 @@ def order_data(t, y, e=None):
     return t[idx], y[idx], e[idx]
 
 
-def fold_data(t, y, period, t0=None, e=None):
+def fold_data(t, y, e=None, period=None, t0=None):
+    if period is None:
+        raise Exception
     if t0 is None:
         fold_t = (t % period) / period
     else:
         fold_t = ((t - t0 + (period/2)) % period) / period
-    return order_data(fold_t, y, e)
+    return order_data(fold_t - 0.5, y, e)
 
 
-def fold_data_alternate(t, y, period, t0=None, e=None):
+def fold_data_alternate(t, y, e=None, period=None, t0=None):
     '''Slighty faster, but I stole it from transitleastsquares so I don't want to use it'''
+    if period is None:
+        raise Exception
     if t0 is None:
         fold_t = t / period - np.floor(t / period)
     else:
         fold_t = (t - t0) / period - np.floor((t - t0) / period)
     return order_data(fold_t, y, e)
+
+# TODO: refactor for generality
+def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
+    """
+    Check if a given transit time falls within any observed segment of the lightcurve data, 
+    accounting for gaps.
+
+    Parameters:
+    - t: Transit time to check.
+    - time: Array of observed times from the lightcurve data.
+    - gap_threshold: Time difference threshold to define gaps (default: 5x median cadence).
+
+    Returns:
+    - True if the transit time falls within an observed segment, False otherwise.
+    """
+    if len(time) < 2:
+        return False  # Not enough data to define segments
+
+    # Sort time to ensure correct order
+    time = np.sort(time)
+
+    # Compute time differences to identify gaps
+    dt = np.diff(time)
+
+    # Define a threshold for gaps (default: 5x median cadence)
+    if gap_threshold is None:
+        gap_threshold = gap_factor * np.median(dt)
+
+    # Identify segment boundaries (where large gaps exist)
+    segment_start = time[0]
+    for i in range(len(dt)):
+        if dt[i] > gap_threshold:
+            segment_end = time[i]  # End of this segment
+            if segment_start <= t <= segment_end:
+                return True  # Transit is within this segment
+            segment_start = time[i + 1]  # Start a new segment
+
+    # Check last segment
+    if segment_start <= t <= time[-1]:
+        return True
+
+    return False  # Transit falls within a gap
+
+# TODO: refactor for generality
+def get_transits_in_data(time, period, t0, epoch=0):
+    """
+    Get transit times for a planet that fall within the lightcurve data range, accounting for gaps.
+    The transit numbers are adjusted to start from 0.
+
+    Parameters:
+    - planet: Planet object with period, time_of_midtransit, and duration attributes.
+    - time: Array of observation times from the lightcurve data.
+    - epoch: Reference epoch (default is 0).
+
+    Returns:
+    - A dictionary where keys are transit sequence numbers starting from 0, and values are transit times.
+    """
+    # Define planet transit variables
+    t0 = t0 - epoch
+
+    # Generate all potential transit times
+    transit_numbers = np.arange(
+        np.floor((time[0] - t0) / period),
+        np.ceil((time[-1] - t0) / period)
+    )
+    transit_times = t0 + transit_numbers * period
+
+    # Identify transits that fall within the observed lightcurve segments
+    valid_transits = {}
+    for n, t in zip(transit_numbers, transit_times):
+        if is_within_observed_data(t, time):  # Check if this transit falls within observed data
+            valid_transits[int(n)] = t
+
+    # Adjust transit numbers to start from 0
+    if valid_transits:
+        min_transit_number = min(valid_transits.keys())
+        valid_transits = {n - min_transit_number: t for n, t in valid_transits.items()}
+
+    return valid_transits
 
 
 def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
@@ -640,7 +749,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
 
                         for lc in lc_collection:
                             sector = getattr(lc, sector_keys[mission])
-                            lc = lc.remove_nans()
+                            lc = lc.remove_nans().normalize()
 
                             if np.any(lc.flux is None) or np.any(lc.flux_err is None):
                                 print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
@@ -688,6 +797,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                     sectors_available = eleanor_observed_sectors(name=system_name, sectors='all')
                 except Exception as exc:
                     sectors_available = []
+                    traceback.print_exc()
                     print(f"eleanor could not resolve {system_name}: {exc}")
 
                 epoch = get_epoch('TESS')
@@ -698,9 +808,6 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                     for instrument in data.keys():
                         for sector in data[instrument].keys():
                             sectors_downloaded.append(sector)
-
-                    print(sectors_available)
-                    print(sectors_downloaded)
                     
                     sectors_downloaded = set(sectors_downloaded)
                     sectors_available = [sector for sector in sectors_available if sector not in sectors_downloaded]
@@ -711,6 +818,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                     mask[instrument] = {}
 
                     for sector in sectors_available:
+                        print(sector)
                         try:
                             star_sector = eleanor.Source(
                                 name=system_name, sector=sector
@@ -720,9 +828,15 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                                 do_psf=(flux_type == 'psf'),
                                 do_pca=(flux_type in ('pca', 'corr')),
                             )
-                            datum.save()  # Cache locally so re-runs are fast
+                            #datum.save()  # Cache locally so re-runs are fast
+                            #except it doesn't work right now - issue with eleanor, not this
 
-                            q = datum.quality_mask
+                            # Do bitwise comparison of data quality flags ---- #
+                            quality = datum.quality
+                            q = np.where((quality & 479935 == 0), True, False)
+
+                            if len(q) != len(datum.time):
+                                q = np.bool(True) * np.ones(len(datum.time))
                             t_raw = datum.time[q] + epoch  # BTJD → absolute BJD
 
                             flux_arr = getattr(datum, f"{flux_type}_flux")[q]
@@ -732,7 +846,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                                 else np.full_like(flux_arr, np.nanstd(flux_arr))
                             )
 
-                            # Normalise to median = 1 for consistency with MAST lcs
+                            # Normalise to median = 1 ------------------------ #
                             med = np.nanmedian(flux_arr)
                             if med != 0:
                                 flux_arr = flux_arr / med
@@ -760,6 +874,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
 
                         except Exception as exc:
                             print(f"eleanor sector {sector} ({flux_type}) failed: {exc}")
+                            traceback.print_exc()
                             continue
 
                     # Use datum.cadence if available, otherwise infer from sector
@@ -803,7 +918,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
             y = np.ma.MaskedArray(data=sector_data['y'], mask=sector_mask['y'] if sector_mask['y'] is not None else False)
             e = np.ma.MaskedArray(data=sector_data['e'], mask=sector_mask['e'] if sector_mask['e'] is not None else False)
 
-            lcs.append(LightCurve(t, y, e, instrument=key, cadence=instrument_expt))
+            lcs.append(LightCurve(t, y, e, instrument=key, cadence=instrument_expt, sector=sector))
 
         collections.append(lcs)
 
