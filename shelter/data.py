@@ -1,4 +1,4 @@
-import os.path
+import os
 import numpy as np
 from .utils import to_list_of_arrays, get_epoch
 import traceback
@@ -550,7 +550,7 @@ def get_transits_in_data(time, period, t0, epoch=0):
     return valid_transits
 
 
-def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
+def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
                    overwrite=False, save_format='pickle', system=None, mask_transits=False, mask_tolerance=4):
     """
     Function to query and download lightcurves from space telescopes.
@@ -633,6 +633,8 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
         else:
             return lc[transit_mask]
 
+    if not os.path.exists(lc_directory):
+        os.makedirs(lc_directory)
     lc_filename = os.path.join(lc_directory, f"{system_name}_lightcurve.pkl")
 
     valid_missions = {'Kepler', 'K2', 'TESS'}
@@ -662,20 +664,21 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
     # Normalize missions
     missions = to_list(missions)
 
-    # Normalize authors
-    if not authors:
-        authors = {m: preferred_authors[m] for m in missions}
-    else:
-        authors = to_dict_over_missions(to_list(authors), missions)
-        authors = {m: to_list(authors[m]) if not isinstance(authors[m], list) else authors[m] for m in missions}
+    if len(missions) > 0:
+        # Normalize authors
+        if not authors:
+            authors = {m: preferred_authors[m] for m in missions}
+        else:
+            authors = to_dict_over_missions(to_list(authors), missions)
+            authors = {m: to_list(authors[m]) if not isinstance(authors[m], list) else authors[m] for m in missions}
 
-    # Normalize cadences
-    if not isinstance(cadences, dict):
-        cadences = {m: {a: to_list(cadences) for a in authors[m]} for m in missions}
+        # Normalize cadences
+        if not isinstance(cadences, dict):
+            cadences = {m: {a: to_list(cadences) for a in authors[m]} for m in missions}
 
-    # Normalize selections
-    if not isinstance(selection, dict):
-        selection = {m: {a: {c: selection for c in cadences[m][a]} for a in authors[m]} for m in missions}
+        # Normalize selections
+        if not isinstance(selection, dict):
+            selection = {m: {a: {c: selection for c in cadences[m][a]} for a in authors[m]} for m in missions}
 
     # ------------------------------------------------------------------------ #
     # Check if file exists and read it if not forcing download                 #
@@ -703,88 +706,89 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
         # -------------------------------------------------------------------- #
         # Loop over all MAST combinations                                      #
         # -------------------------------------------------------------------- #
-        try:
-            import lightkurve as lk
-        except ImportError:
-            print("Lightkurve is not installed! Skipping download")
-        else:
-            for mission in missions:
-                for author in authors[mission]:
-                    for cadence in cadences[mission][author]:
-                        instrument = mission
-                        select = selection[mission][author][cadence]
-                        if len(authors) != 1:
-                            instrument += ('-' + author)
-                        if len(cadences) != 1:
-                            instrument += ('-' + cadence)
+        if len(missions) > 0:
+            try:
+                import lightkurve as lk
+            except ImportError:
+                print("Lightkurve is not installed! Skipping download")
+            else:    
+                for mission in missions:
+                    for author in authors[mission]:
+                        for cadence in cadences[mission][author]:
+                            instrument = mission
+                            select = selection[mission][author][cadence]
+                            if len(authors) != 1:
+                                instrument += ('-' + author)
+                            if len(cadences) != 1:
+                                instrument += ('-' + cadence)
 
-                        data[instrument] = {}
-                        mask[instrument] = {}
+                            data[instrument] = {}
+                            mask[instrument] = {}
 
-                        # Search for lightcurve data ------------------------- #
-                        print(f"Downloading {cadence}-second lightcurve data by {author} from {mission} for {system_name}.")
-                        search_result = lk.search_lightcurve(system_name, mission=mission, author=author, exptime=cadence)
+                            # Search for lightcurve data --------------------- #
+                            print(f"Downloading {cadence}-second lightcurve data by {author} from {mission} for {system_name}.")
+                            search_result = lk.search_lightcurve(system_name, mission=mission, author=author, exptime=cadence)
 
-                        print(search_result)
-                        if len(search_result) == 0:
-                            raise Exception('No search results found.')
+                            print(search_result)
+                            if len(search_result) == 0:
+                                raise Exception('No search results found.')
 
-                        # Handle 'longest' and 'shortest' cadence options ---- #
-                        if cadence == 'longest':
-                            cadence = max(search_result.exptime)
-                        elif cadence == 'shortest':
-                            cadence = min(search_result.exptime)
-                        search_result = search_result[search_result.exptime == cadence]
+                            # Handle 'longest' and 'shortest' cadence args --- #
+                            if cadence == 'longest':
+                                cadence = max(search_result.exptime)
+                            elif cadence == 'shortest':
+                                cadence = min(search_result.exptime)
+                            search_result = search_result[search_result.exptime == cadence]
 
-                        # Download and stitch lightcurves -------------------- #
-                        lc_collection = search_result.download_all()
-                        for lc in lc_collection:
-                            epoch = get_epoch(mission)
-                            lc.time = lc.time + epoch  # Adjust time to absolute BJD
+                            # Download and stitch lightcurves ---------------- #
+                            lc_collection = search_result.download_all()
+                            for lc in lc_collection:
+                                epoch = get_epoch(mission)
+                                lc.time = lc.time + epoch  # Adjust time to absolute BJD
 
-                        if select != 'all':
-                            lc_collection = lc_collection[select]
-                        if isinstance(select, int):
-                            lc_collection = [lc_collection]
+                            if select != 'all':
+                                lc_collection = lc_collection[select]
+                            if isinstance(select, int):
+                                lc_collection = [lc_collection]
 
-                        for lc in lc_collection:
-                            sector = getattr(lc, sector_keys[mission])
-                            lc = lc.remove_nans().normalize()
+                            for lc in lc_collection:
+                                sector = getattr(lc, sector_keys[mission])
+                                lc = lc.remove_nans().normalize()
 
-                            if np.any(lc.flux is None) or np.any(lc.flux_err is None):
-                                print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
+                                if np.any(lc.flux is None) or np.any(lc.flux_err is None):
+                                    print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
 
-                            # Mask transits ---------------------------------- #
-                            if (system is not None) and mask_transits:
-                                if len(system.planets) > 0:
-                                    lc = mask_lightcurve_transits(lc, system, tolerance=mask_tolerance)
+                                # Mask transits ------------------------------ #
+                                if (system is not None) and mask_transits:
+                                    if len(system.planets) > 0:
+                                        lc = mask_lightcurve_transits(lc, system, tolerance=mask_tolerance)
 
-                                # If the whole sector is masked out, move on
-                                if len(lc.t) == 0:
-                                    continue
+                                    # If the whole sector is masked out, move on
+                                    if len(lc.t) == 0:
+                                        continue
 
-                            # Extract time and flux data --------------------- #
-                            t = lc.time.value  # in days
-                            y = lc.flux.value
-                            e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
+                                # Extract time and flux data ----------------- #
+                                t = lc.time.value  # in days
+                                y = lc.flux.value
+                                e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
 
-                            # Convert data to plain NumPy arrays ------------- #
-                            t_data = np.array(t.data if hasattr(t, 'data') else t)
-                            t_mask = np.array(t.mask if hasattr(t, 'mask') else None)
-                            y_data = np.array(y.data if hasattr(y, 'data') else y)
-                            y_mask = np.array(y.mask if hasattr(y, 'mask') else None)
-                            e_data = np.array(e.data if hasattr(e, 'data') else e)
-                            e_mask = np.array(e.mask if hasattr(e, 'mask') else None)
+                                # Convert data to plain NumPy arrays --------- #
+                                t_data = np.array(t.data if hasattr(t, 'data') else t)
+                                t_mask = np.array(t.mask if hasattr(t, 'mask') else None)
+                                y_data = np.array(y.data if hasattr(y, 'data') else y)
+                                y_mask = np.array(y.mask if hasattr(y, 'mask') else None)
+                                e_data = np.array(e.data if hasattr(e, 'data') else e)
+                                e_mask = np.array(e.mask if hasattr(e, 'mask') else None)
 
-                            # Store in dictionaries -------------------------- #
-                            data[instrument][sector] = {'t': t_data, 'y': y_data, 'e': e_data}
-                            mask[instrument][sector] = {'t': t_mask, 'y': y_mask, 'e': e_mask}
-                        expt[instrument] = cadence
+                                # Store in dictionaries ---------------------- #
+                                data[instrument][sector] = {'t': t_data, 'y': y_data, 'e': e_data}
+                                mask[instrument][sector] = {'t': t_mask, 'y': y_mask, 'e': e_mask}
+                            expt[instrument] = cadence
 
         # -------------------------------------------------------------------- #
         # Extract FFI lightcurves via eleanor                                  #
         # -------------------------------------------------------------------- #
-        if extract_ffi and 'TESS' in missions:
+        if extract_ffi: #and 'TESS' in missions:
             try:
                 import eleanor
             except ImportError:
@@ -829,7 +833,7 @@ def get_lightcurve(system_name, lc_directory, missions, authors={}, cadences='lo
                                 do_pca=(flux_type in ('pca', 'corr')),
                             )
                             #datum.save()  # Cache locally so re-runs are fast
-                            #except it doesn't work right now - issue with eleanor, not this
+                            # except it doesn't work right now - issue with eleanor, not this
 
                             # Do bitwise comparison of data quality flags ---- #
                             quality = datum.quality

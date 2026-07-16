@@ -6,7 +6,7 @@ from PIL import Image
 import os
 from scipy.signal import convolve2d
 
-def coloured_square(hex_string):
+def coloured_square(hex_string, print_hex=True):
     """
     Returns a coloured square that you can print to a terminal.
     """
@@ -16,7 +16,10 @@ def coloured_square(hex_string):
     green = int(hex_string[2:4], 16)
     blue = int(hex_string[4:6], 16)
 
-    return f"\033[48:2::{red}:{green}:{blue}m \033[49m : {hex_string}"
+    if print_hex:
+        return f"\033[48:2::{red}:{green}:{blue}m \033[49m : #{hex_string}"
+    else:
+        return f"\033[48:2::{red}:{green}:{blue}m \033[49m"
 
 # ---------------- Conversion Functions ----------------
 
@@ -83,8 +86,46 @@ def sRGB_to_HSV(rgb):
     Returns:
         HSV (array-like): HSV value
     """
-    return 1
-    #X_max = np.max()
+    rgb = np.array(rgb)
+    if len(np.shape(rgb)) == 1:
+        V = np.max(rgb)
+        X_min = np.min(rgb)
+
+        C = V - X_min
+        if C == 0:
+            H = 0
+        if V == rgb[0]:
+            H = 1/6 * (((rgb[1]-rgb[2])/C)%6)
+        if V == rgb[1]:
+            H = 1/6 * (((rgb[2]-rgb[0])/C)+2)
+        if V == rgb[2]:
+            H = 1/6 * (((rgb[0]-rgb[1])/C)+4)
+
+        if V == 0:
+            S = 0
+        else:
+            S = C/V
+
+    else:
+        V = np.max(rgb, axis=1)
+        X_min = np.min(rgb, axis=1)
+
+        C = V - X_min
+        if C == 0:
+            H = 0
+        if V == rgb[0, :]:
+            H = 1/6 * (((rgb[1, :]-rgb[2, :])/C)%6)
+        if V == rgb[1]:
+            H = 1/6 * (((rgb[2, :]-rgb[0, :])/C)+2)
+        if V == rgb[2]:
+            H = 1/6 * (((rgb[0, :]-rgb[1, :])/C)+4)
+
+        if V == 0:
+            S = 0
+        else:
+            S = C/V
+
+    return np.array([H, S, V])
 
 def sRGB_to_Hex(rgb):
     """
@@ -165,7 +206,7 @@ def XYZ_to_HSV(XYZ):
     Returns:
         HSV (array-like): HSV value
     """
-
+    return 1
 
 
 def XYZ_to_Oklab(XYZ):
@@ -275,7 +316,7 @@ _to_XYZ_methods = {
 _from_XYZ_methods = {
     "sRGB": lambda v: RGB_to_sRGB(XYZ_to_RGB(v)),
     "RGB": lambda v: XYZ_to_RGB(v),
-    "HSV": lambda v: HSV_to_XYZ(v),
+    "HSV": lambda v: sRGB_to_HSV(RGB_to_sRGB(XYZ_to_RGB(v))),
     "Hex": lambda v: sRGB_to_Hex(RGB_to_sRGB(XYZ_to_RGB(v))),
     "XYZ": lambda v: np.array(v),
     "Oklab": lambda v: XYZ_to_Oklab(v), 
@@ -312,7 +353,7 @@ class Colour:
         if space not in _to_XYZ_methods:
             raise KeyError(f'Unsupported or invalid colour space: {space}')
             
-        if alpha == None:
+        if alpha is None:
             if len(np.array(value).shape) == 1:
                 alpha = 1
             else:
@@ -321,6 +362,9 @@ class Colour:
         self._value = _to_XYZ_methods[space](value)     # Colour value stored as an array
         self._space = "XYZ"     # All colours are internally stored in CIE XYZ space. Why is this a variable?
         self.alpha = alpha      # Alpha channel is stored separately
+
+    def __repr__(self):
+        return coloured_square(self.get_colour('Hex'))
     
     def set_colour(self, value, space):
         """
@@ -420,6 +464,13 @@ class Gradient:
         self._cyclic_direction = cyclic_direction
         self._nstops = n
         self._most_recent = n - 1
+
+    def __repr__(self):
+        hexes = self.sample(0, 1, 32, output_space='Hex', clip=False, return_alpha=False)
+        str = ""
+        for hex in hexes:
+            str += coloured_square(hex, print_hex=False)
+        return f"Gradient()\n{str}"
 
     def _pick_gradient(self, t):
         """
@@ -598,7 +649,7 @@ class Gradient:
             space_values = np.clip(space_values, a_min=0, a_max=1)
             alphas = np.clip(alphas, a_min=0, a_max=1)
 
-        if not return_alpha:
+        if (not return_alpha) or (output_space=='Hex'):
             return space_values
 
         return np.hstack((space_values, alphas.reshape(-1, 1)))

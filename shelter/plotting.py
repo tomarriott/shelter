@@ -9,11 +9,30 @@ from matplotlib.patheffects import Stroke, Normal, withStroke
 from .utils import extract_kwargs
 from .data import bin_data, fold_data, get_transits_in_data
 from .io import get_directory, find_path
+from .colour import Colour, Gradient
 
 def use_custom_styles():
     plt.style.use(find_path('styles/light_style.mplstyle'))
     plt.style.use(find_path('styles/use_serif.mplstyle'))
     plt.style.use(find_path('styles/paper_text.mplstyle'))
+
+def light_style():
+    plt.style.use(find_path('styles/light_style.mplstyle'))
+
+def dark_style():
+    plt.style.use(find_path('styles/dark_style.mplstyle'))
+
+def serif_style():
+    plt.style.use(find_path('styles/use_serif.mplstyle'))
+
+def sans_style():
+    plt.style.use(find_path('styles/use_sans.mplstyle'))
+
+def paper_style():
+    plt.style.use(find_path('styles/paper_text.mplstyle'))
+
+def talk_style():
+    plt.style.use(find_path('styles/talk_text.mplstyle'))
 
 ################################################################################
 # - PLOTTING DATA ------------------------------------------------------------ #
@@ -23,7 +42,7 @@ def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', **kwargs):
     fig = plt.figure(figsize=figsize)
     ax = fig.subplots()
 
-    ax = func(ax, *args)
+    func(ax, *args)
 
     fig.tight_layout()
 
@@ -33,6 +52,7 @@ def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', **kwargs):
     if save:
         savefig_args = extract_kwargs(plt.savefig, kwargs)
         plt.savefig(save_path, **savefig_args)
+
 
 # Thanks Claude
 def split_axis(ax, nrows=1, ncols=2, share='x', hspace=0.05, wspace=0.05, ratios=None):
@@ -78,6 +98,7 @@ def split_axis(ax, nrows=1, ncols=2, share='x', hspace=0.05, wspace=0.05, ratios
 
     return axes
 
+
 def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2='k', colour3='w'):
     ax.axhline(median, c=colour1, linestyle='-', zorder=10, path_effects=[Stroke(linewidth=3, foreground=colour3, alpha=0.5), Normal()])
 
@@ -88,21 +109,28 @@ def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2=
         ax.axhline(median + ((n + 1) * uncertainty), c=colour2, linestyle=lines[n], alpha=alphas[n], zorder=10)
         ax.axhline(median - ((n + 1) * uncertainty), c=colour2, linestyle=lines[n], alpha=alphas[n], zorder=10)
 
+
 # ---------------------------------------------------------------------------- #
 # Lightcurve plotting                                                          #
 # ---------------------------------------------------------------------------- #
 
-def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False, data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={}, **kwargs):
+def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
+                  data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
+                  bin_data_args={},
+                  bin_errorbar_args={},
+                  **kwargs):
     if ax is None:
         ax = plt.axes()
 
     if yerr is None:
         yerr = np.zeros(np.shape(y))
     
-    ax.errorbar(t, y, yerr=yerr, ms=1, ls='none', c='#f04f4f', fmt='o', mfc='#f04f4f', mec='#4f2020', alpha=0.5, zorder=2, **data_errorbar_args)
+    ax.errorbar(t, y, yerr=yerr, **data_errorbar_args)
 
     if isinstance(transit_times, dict):
         transit_times = transit_times.values()
+    if isinstance(transit_times, list):
+        transit_times = np.array(transit_times)
 
     for transit in transit_times:
         ax.axvline(transit, c='#40a1a1', alpha=0.5, zorder=0, linestyle='--')
@@ -115,23 +143,53 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False, data_er
     ax.set_xlabel('Time (BJD)')
     ax.set_ylabel('Flux')
 
-def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False, figsize=(10, 6), save=os.path.join(get_directory(), 'lightcurve.png'), save_path=None, **kwargs):
-    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin, figsize=figsize, save=save, save_path=save_path, **kwargs)
+
+def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
+                    figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
+                    data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
+                    bin_data_args={},
+                    bin_errorbar_args={},
+                    **kwargs):
+    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin,
+              figsize=figsize, save=save, save_path=save_path,
+              data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+
 
 # ---------------------------------------------------------------------------- #
 # Phasefold plotting                                                           #
 # ---------------------------------------------------------------------------- #
 
-def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True, bin_data_args={'n_points': 200}, data_errorbar_args={}, bin_errorbar_args={}, **kwargs):
+def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
+                 data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
+                 bin_data_args={'n_points': 200},
+                 bin_errorbar_args={},
+                 **kwargs):
     ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin,
                   data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
 
     ax.set_xlabel('Phase')
 
-def plot_phasefold(t, y, yerr=None, period=None, t0=None, plot_bin=True, bin_data_args={'n_points': 200}, data_errorbar_args={}, bin_errorbar_args={}, **kwargs):
-    plot_axes(ax_phasefold, t, y, yerr, period, t0, plot_bin, bin_data_args, data_errorbar_args, bin_errorbar_args, **kwargs)
+    if (period is not None) and (duration is not None):
+        xlims = -duration/(period), duration/(period)
+        ax.set_xlim(xlims)
+    if depth is not None:
+        ylims = -3*depth + 1, 2*depth + 1
+        ax.set_ylim(ylims)
 
-def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True, bin_data_args={'n_points': 200}, data_errorbar_args={}, bin_errorbar_args={}, **kwargs):
+
+def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
+                   data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
+                   bin_data_args={'n_points': 200},
+                   bin_errorbar_args={},
+                   **kwargs):
+    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, bin_data_args, data_errorbar_args, bin_errorbar_args, **kwargs)
+
+
+def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
+               data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
+               bin_data_args={'n_points': 200},
+               bin_errorbar_args={},
+               **kwargs):
     axes = split_axis(ax, nrows=1, ncols=2, share='none', hspace=0, wspace=0)
 
     ax_lightcurve(axes[0], *fold_data(t, y, period=2*period, t0=t0, e=yerr), plot_bin=plot_bin,
@@ -150,6 +208,53 @@ def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True, bin_dat
     axes[1].yaxis.set_major_formatter(plt.NullFormatter())
 
     return ax, axes
+
+
+def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, transit_times={}, offset=0.2, plot_bin=False, 
+                data_errorbar_args={'ms':2, 'fmt':'o', 'mew':1, 'alpha':1, 'zorder':2,},
+                bin_data_args={'n_points': 200},
+                bin_errorbar_args={},
+                **kwargs):
+    if len(transit_times) == 0:
+        if (period is not None) and (t0 is not None):
+            transit_times = get_transits_in_data(t, period, t0)
+        else:
+            raise Exception('Period/t0 or transit times must be provided')
+        
+    from shelter.colour import Colour, Gradient
+
+    colour1 = Colour((122/255, 231/255, 199/255), 'sRGB')
+    colour2 = Colour((224/255, 119/255, 125/255), 'sRGB')
+    colour3 = Colour((244/255, 211/255, 94/255), 'sRGB')
+    colour4 = Colour((172/255, 148/255, 247/255), 'sRGB')
+    #print(colour1, colour2, colour3, colour4)
+    gradient = Gradient([colour2, colour3, colour1, colour4], [0, .3, .7, 1], interp_space='Oklab')
+    #print(gradient)
+
+    if period is None:
+        period = np.min(np.array(transit_times.values()).diff())
+    if t0 is None:
+        t0 = np.min(np.array(transit_times.values()))
+
+    for i, n in enumerate(transit_times.keys()):
+        min_orbit = transit_times[n] - period/2
+        max_orbit = transit_times[n] + period/2
+        lc_slice = np.logical_and(t >= min_orbit, t < max_orbit)
+
+        position = (n - min(transit_times.keys())) / max(transit_times.keys())
+        c = gradient.sample(position, position, 1, output_space='Hex', return_alpha=False)
+
+        ax_lightcurve(ax, *fold_data(t[lc_slice], y[lc_slice]+(i*offset), yerr[lc_slice], period, t0),
+                      c=c, mfc='w', mec=c,
+                      data_errorbar_args=data_errorbar_args)
+
+    if (period is not None) and (duration is not None):
+        xlims = -duration/(period), duration/(period)
+        ax.set_xlim(xlims)
+    if depth is not None:
+        ylims = -3*depth + 1, 2*depth + 1 + (len(transit_times)*offset)
+        ax.set_ylim(ylims)
+
 
 # ---------------------------------------------------------------------------- #
 # Histograms                                                                   #
@@ -216,8 +321,8 @@ def ax_spectrum(ax, periods, power, period, planet=None):
     for n in range(2, 10):
         ax.axvline(n*period, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
         ax.axvline(period / n, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
-        
-    ax.plot(periods, power, color='black', lw=0.5)
+
+    ax.plot(periods, power, color=plt.rcParams['axes.edgecolor'], lw=0.5)
 
     ax.set_ylabel(r'SDE')
     ax.set_xlabel('Period (days)')
@@ -255,13 +360,13 @@ def title_text(ax, s, position=(0.5, 0.95), size='large', c='k', ec='w', **kwarg
             s, color=c, size=size, verticalalignment='top', horizontalalignment='center',
             path_effects=[withStroke(linewidth=3, foreground=ec, alpha=0.8)])
 
-def TLS_dashboard(system, tls_results=None, lc=None, row=None):
+def TLS_dashboard(tls_results, star, lc, save=False, save_path='', **kwargs):
     px = 1/plt.rcParams['figure.dpi']  # pixel in inches
 
     fig = plt.figure(figsize=(1320*px, 800*px))#, layout='constrained')
 
-    face_colours = '#ffffff'
-    edge_colours = '#000000'
+    face_colours = 'none'
+    edge_colours = plt.rcParams['axes.edgecolor']
 
     # Define gridspec and axes ----------------------------------------------- #
     gs = GridSpec(3, 5, fig, width_ratios=[1, 1, 1, 0.8, 0.8])
@@ -294,6 +399,7 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     ax_info.set_aspect(900/240)
     aspect_info = ax_info.get_aspect()
 
+    # Make box patches
     inf_box = FancyBboxPatch((0, 0), 1, 1,
             boxstyle="round,pad=-0.0040,rounding_size=0.1",
             edgecolor=edge_colours, fc=face_colours, linewidth=1, linestyle='-',
@@ -332,10 +438,11 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     
     snr_box = FancyBboxPatch((10/240, 10/900), 220/240, 50/900,
             boxstyle="round,pad=-0.0040,rounding_size=0.05",
-            edgecolor=snr_colour, fc=face_colours, linewidth=1, linestyle='-',
+            edgecolor=edge_colours, fc=snr_colour, linewidth=1, linestyle='-',
             alpha=1, mutation_aspect=1/aspect_info
         )
 
+    # Add boxes
     ax_info.add_patch(inf_box)
     ax_info.add_patch(loc_box)
     ax_info.add_patch(mag_box)
@@ -344,23 +451,24 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     ax_info.add_patch(res_box)
     ax_info.add_patch(snr_box)
 
+    # Add text to infobox
     ax_info.text(0.5, 890/900,
-                 system.stars[0].spc, size='xx-large', verticalalignment='top', horizontalalignment='center',
+                 star.spc, c='k', size='xx-large', verticalalignment='top', horizontalalignment='center',
                  path_effects=[withStroke(linewidth=3, foreground='w', alpha=0.8)])
     
     ax_info.text(0.5, 850/900,
-                 f'TIC {system.stars[0].name}', size='x-large', verticalalignment='top', horizontalalignment='center')
+                 f'TIC {star.name}', size='x-large', verticalalignment='top', horizontalalignment='center')
     
     ax_info.text(0.5, 820/900,
-                 f'Gaia DR2:\n{system.stars[0].gaia}', size='medium', verticalalignment='top', horizontalalignment='center')
+                 f'Gaia DR2:\n{star.gaia}', size='medium', verticalalignment='top', horizontalalignment='center')
     
     ax_info.text(0.5, 775/900,
-                 f'2MASS:\n{system.stars[0]._2MASS}', size='medium', verticalalignment='top', horizontalalignment='center')
+                 f'2MASS:\n{star._2MASS}', size='medium', verticalalignment='top', horizontalalignment='center')
 
     ax_info.text(20/240, 640/900, f'RA:\nDec:\nDist:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 640/900, f'{system.stars[0].ra:.7f}\n{system.stars[0].dec:.7f}\n{system.stars[0].distance.value:.0f}$\pm${system.stars[0].distance.lower} pc',
+    ax_info.text(220/240, 640/900, f'{star.ra:.7f}\n{star.dec:.7f}\n{star.distance.value:.0f}$\pm${star.distance.lower} pc',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
     ax_info.text(0.5, 610/900,
@@ -369,34 +477,34 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     ax_info.text(20/240, 500/900, f'TESS:\nI:\nH:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(120/240, 500/900, f'{system.stars[0].TESSmag:.1f}\n{system.stars[0].Imag:.1f}\n{system.stars[0].Hmag:.1f}',
+    ax_info.text(120/240, 500/900, f'{star.TESSmag:.1f}\n{star.Imag:.1f}\n{star.Hmag:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
     ax_info.text(140/240, 500/900, f'G:\nJ:\nK:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 500/900, f'{system.stars[0].Gmag:.1f}\n{system.stars[0].Jmag:.1f}\n{system.stars[0].Kmag:.1f}',
+    ax_info.text(220/240, 500/900, f'{star.Gmag:.1f}\n{star.Jmag:.1f}\n{star.Kmag:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
 
     ax_info.text(20/240, 390/900, f'Mass ($\\text{{M}}_{{\odot}}$):\nRadius ($\\text{{R}}_{{\odot}}$):\nTeff (K):',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 390/900, f'{system.stars[0].mass.value:.2f}$\pm${system.stars[0].mass.lower:.2f}\n{system.stars[0].radius.value:.2f}$\pm${system.stars[0].radius.lower:.2f}\n{system.stars[0].temperature.value:.0f}$\pm${system.stars[0].temperature.lower:.2f}',
+    ax_info.text(220/240, 390/900, f'{star.mass.value:.2f}$\pm${star.mass.lower:.2f}\n{star.radius.value:.2f}$\pm${star.radius.lower:.2f}\n{star.temperature.value:.0f}$\pm${star.temperature.lower:.0f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
     ax_info.text(20/240, 250/900, 'SDE:\nProminence:\nSDE raw:\nProm. raw:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 250/900, f'{tls_results.SDE:.4f}\n{tls_results.prominence:.4f}\n{tls_results.SDE_raw:.4f}\n{tls_results.prominence_raw:.4f}',
+    ax_info.text(220/240, 250/900, f'{tls_results.SDE:.2f}\n{tls_results.prominence:.2f}\n{tls_results.SDE_raw:.2f}\n{tls_results.prominence_raw:.2f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
     ax_info.text(20/240, 80/900, 'Period (d):\nt0:\nDuration (h):\nDepth (%):\nRp/R*',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 80/900, f'{tls_results.period:.8f}\n{tls_results.T0:.8f}\n{duration*24:.4f}\n{(1-tls_results.depth)*1e2:.4f}\n{tls_results.rp_rs:.4f}',
+    ax_info.text(220/240, 80/900, f'{tls_results.period:.8f}\n{tls_results.T0:.8f}\n{duration*24:.2f}\n{(1-tls_results.depth)*1e2:.2f}\n{tls_results.rp_rs:.4f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
-    ax_info.text(120/240, 32.5/900, f'SNR = {snr:.2f}', color=snr_colour,
+    ax_info.text(120/240, 32.5/900, f'SNR = {snr:.2f}', color='w',
                 size='x-large', verticalalignment='center', horizontalalignment='center', linespacing=1)
 
     # Periodogram ------------------------------------------------------------ #
@@ -409,7 +517,7 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     from .tpfplotter.tpfplotter import plot_tpf
 
     #tic=system.name.replace('TIC ', '')
-    plot_tpf(tic=str(system.stars[0].name), ax=ax_neighborhood)
+    plot_tpf(tic=str(star.name), ax=ax_neighborhood)
     # Phasefold -------------------------------------------------------------- #
     ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': 0.001})
     residual_line(ax_phase, tls_results.depth_mean[0], tls_results.depth_mean[1])
@@ -421,48 +529,9 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     ax_phase.set_ylim(ylims)
 
     title_text(ax_phase, 'Phasefolded Signal')
-    title_text(ax_phase, f'$\delta = {(1 - tls_results.depth_mean[0])*1e2:.3f} \pm {tls_results.depth_mean[1]*1e2:.3f}$ %', size='medium', position=(0.5, 0.85))
+    title_text(ax_phase, f'$\delta = {(1 - tls_results.depth_mean[0])*1e2:.1f} \pm {tls_results.depth_mean[1]*1e2:.1f}$ %', size='medium', position=(0.5, 0.85))
 
     # Results box ------------------------------------------------------------ #
-    '''
-    ax_results.xaxis.set_major_locator(NullLocator())
-    ax_results.yaxis.set_major_locator(NullLocator())
-
-    results_box = FancyBboxPatch((0, 0), 1, 1,
-                boxstyle="round,pad=-0.0040,rounding_size=0",
-                edgecolor=edge_colours, fc=face_colours, linewidth=1, linestyle='-',
-                alpha=1, mutation_aspect=1
-                )
-    
-    SDE_box = FancyBboxPatch((10/760, 10/240), 220/760, 220/240,
-            boxstyle="round,pad=-0.0040,rounding_size=0.02",
-            edgecolor=edge_colours, fc=face_colours, linewidth=1, linestyle='--',
-            alpha=1, mutation_aspect=760/240
-            )
-    
-    period_box = FancyBboxPatch((260/760, 10/240), 220/760, 220/240,
-            boxstyle="round,pad=-0.0040,rounding_size=0.02",
-            edgecolor=edge_colours, fc=face_colours, linewidth=1, linestyle='--',
-            alpha=1, mutation_aspect=760/240
-            )
-    
-    oddeven_box = FancyBboxPatch((510/760, 10/240), 220/760, 220/240,
-            boxstyle="round,pad=-0.0040,rounding_size=0.02",
-            edgecolor=edge_colours, fc=face_colours, linewidth=1, linestyle='--',
-            alpha=1, mutation_aspect=760/240
-            )
-    
-    ax_results.text(20/760, 220/240, 'SDE:\nProminence:\nSDE raw:\nProm. raw:',
-                    size='large', verticalalignment='top', horizontalalignment='left', linespacing=2)
-    
-    ax_results.text(220/760, 220/240, f'{tls_results.SDE:.4f}\n{tls_results.prominence:.4f}\n{tls_results.SDE_raw:.4f}\n{tls_results.prominence_raw:.4f}',
-                    size='large', verticalalignment='top', horizontalalignment='right', linespacing=2)
-
-    #ax_results.add_patch(results_box)
-    ax_results.add_patch(SDE_box)
-    ax_results.add_patch(period_box)
-    ax_results.add_patch(oddeven_box)
-    '''
     ax_lightcurve(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
 
     # Odd-even transits ------------------------------------------------------ #
@@ -480,13 +549,19 @@ def TLS_dashboard(system, tls_results=None, lc=None, row=None):
     title_text(axes[0], 'Odd')
     title_text(axes[1], 'Even')
 
-    title_text(axes[0], f'$\delta = {(1 - tls_results.depth_mean_odd[0])*1e2:.2f} \pm {tls_results.depth_mean_odd[1]*1e2:.2f}$ %', size='medium', position=(0.5, 0.85))
-    title_text(axes[1], f'$\delta = {(1 - tls_results.depth_mean_even[0])*1e2:.2f} \pm {tls_results.depth_mean_even[1]*1e2:.2f}$ %', size='medium', position=(0.5, 0.85))
+    title_text(axes[0], f'$\delta = {(1 - tls_results.depth_mean_odd[0])*1e2:.1f} \pm {tls_results.depth_mean_odd[1]*1e2:.1f}$ %', size='medium', position=(0.5, 0.85))
+    title_text(axes[1], f'$\delta = {(1 - tls_results.depth_mean_even[0])*1e2:.1f} \pm {tls_results.depth_mean_even[1]*1e2:.1f}$ %', size='medium', position=(0.5, 0.85))
 
     title_text(ax_odd_even, f'Odd-Even Mismatch: {tls_results.odd_even_mismatch:.2f} $\sigma$', position=(0.5, 1.1), size='large')
 
     #format_axes(fig)
 
+    # Finish up -------------------------------------------------------------- #
     fig.tight_layout()
 
-    plt.show()
+    if not save:
+        plt.show()
+
+    if save:
+        savefig_args = extract_kwargs(plt.savefig, kwargs)
+        plt.savefig(save_path, **savefig_args)

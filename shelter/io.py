@@ -73,8 +73,7 @@ def file_load(file):
     return read_csv(csv_location)
 
 def create_folder(folder):
-    is_exist = os.path.exists(folder)
-    if not is_exist:
+    if not os.path.exists(folder):
         # Create a new directory because it does not exist
         os.makedirs(folder)
 

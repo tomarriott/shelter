@@ -7,8 +7,11 @@ ytick.labelsize: small
 legend.fontsize: medium
 
 text.color: white
+axes.facecolor: black
 axes.edgecolor: white
 axes.labelcolor: white
+figure.facecolor: black
+figure.edgecolor: white
 
 xtick.top: True
 xtick.bottom: True

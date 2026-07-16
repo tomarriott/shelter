@@ -125,10 +125,10 @@ def plot_tpf(
 
     if use_coord:
         ra, dec = coord.split(",")[0], coord.split(",")[1]
-        print("* Working on " + tic_label + " (ra = " + ra + ", " + "dec = " + dec + ") ...")
+        print("* Making TPFplot for " + tic_label + " (ra = " + ra + ", " + "dec = " + dec + ") ...")
     else:
         ra, dec = get_coord(tic_label)
-        print("* Working on TIC" + tic_label + " (ra = " + str(ra) + ", " + "dec = " + str(dec) + ") ...")
+        print("* Making TPFplot for TIC" + tic_label + " (ra = " + str(ra) + ", " + "dec = " + str(dec) + ") ...")
 
     # --- Resolve Gaia ID / magnitude -------------------------------------
     if gid is not None:
