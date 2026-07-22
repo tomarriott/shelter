@@ -512,7 +512,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
                 size='x-large', verticalalignment='center', horizontalalignment='center', linespacing=1)
 
     # Periodogram ------------------------------------------------------------ #
-    ax_TLS_spectrum(ax_spectrum, tls_results, chnuks=chunks)
+    ax_TLS_spectrum(ax_spectrum, tls_results, chunks=chunks)
 
     ax_spectrum.set_title('')
     title_text(ax_spectrum, 'TransitLeastSquares Periodogram')
