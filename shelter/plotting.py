@@ -538,7 +538,8 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     # Results box ------------------------------------------------------------ #
     ax_lightcurve(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
 
-    ax_results.set_ylim([0.8, 1.2])
+    ax_results.set_xlim([lc.t[0], lc.t[-1]])
+    ax_results.set_ylim([0.9, 1.1])
 
     # Odd-even transits ------------------------------------------------------ #
     ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': 0.002})

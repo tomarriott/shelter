@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from .utils import to_list_of_arrays, get_epoch
+from .io import get_directory
 import traceback
 # from dataclasses import dataclass, field
 
@@ -550,7 +551,7 @@ def get_transits_in_data(time, period, t0, epoch=0):
     return valid_transits
 
 
-def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
+def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
                    overwrite=False, save_format='pickle', system=None, mask_transits=False, mask_tolerance=4):
     """
     Function to query and download lightcurves from space telescopes.
@@ -633,7 +634,7 @@ def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences=
         else:
             return lc[transit_mask]
 
-    if not os.path.exists(lc_directory):
+    if (not os.path.exists(lc_directory)):
         os.makedirs(lc_directory)
     lc_filename = os.path.join(lc_directory, f"{system_name}_lightcurve.pkl")
 
@@ -798,7 +799,7 @@ def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences=
 
                 # Resolve the target and find available sectors -------------- #
                 try:
-                    sectors_available = eleanor_observed_sectors(name=system_name, sectors='all')
+                    sectors_available = eleanor_observed_sectors(name=system_name, sectors=selection)
                 except Exception as exc:
                     sectors_available = []
                     traceback.print_exc()
@@ -837,7 +838,11 @@ def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences=
 
                             # Do bitwise comparison of data quality flags ---- #
                             quality = datum.quality
-                            q = np.where((quality & 479935 == 0), True, False)
+                            q = np.where((quality & 481983 == 0), True, False)
+
+                            with np.printoptions(threshold=np.inf):
+                                print(quality)
+                                print(q)
 
                             if len(q) != len(datum.time):
                                 q = np.bool(True) * np.ones(len(datum.time))
@@ -924,7 +929,10 @@ def get_lightcurve(system_name, lc_directory, missions=[], authors=[], cadences=
 
             lcs.append(LightCurve(t, y, e, instrument=key, cadence=instrument_expt, sector=sector))
 
-        collections.append(lcs)
+        if len(lcs) == 1:
+            collections.append(lcs[0])
+        else:
+            collections.append(lcs)
 
     if len(collections) == 1:
         return collections[0]
@@ -941,25 +949,32 @@ def eleanor_observed_sectors(sectors, tic=None, gaia=None, coords=None, name=Non
     from astropy.coordinates import SkyCoord
     import warnings
 
+    if coords is None:
+        if tic is not None:
+            coords, _, _, _ = coords_from_tic(tic)
+        elif gaia is not None:
+            coords = coords_from_gaia(gaia)
+        elif name is not None:
+            coords = coords_from_name(name)
+
+    if coords is not None:
+        if type(coords) is SkyCoord:
+            coords = (coords.ra.degree, coords.dec.degree)
+        result = tess_stars2px(8675309, coords[0], coords[1])
+        sector = result[3][result[3] < maxsector + 0.5]
+        sectors_available = sector.tolist()
+
+    if len(sectors_available) == 0 or sectors_available[0] < 0:
+        raise Exception("Your target is not observed by TESS, or maybe you need to run eleanor.Update()")
+    else:
+        print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors_available))
+
     if sectors == 'all':
-        if coords is None:
-            if tic is not None:
-                coords, _, _, _ = coords_from_tic(tic)
-            elif gaia is not None:
-                coords = coords_from_gaia(gaia)
-            elif name is not None:
-                coords = coords_from_name(name)
-
-        if coords is not None:
-            if type(coords) is SkyCoord:
-                coords = (coords.ra.degree, coords.dec.degree)
-            result = tess_stars2px(8675309, coords[0], coords[1])
-            sector = result[3][result[3] < maxsector + 0.5]
-            sectors = sector.tolist()
-
-        if len(sectors) == 0 or sectors[0] < 0:
-            raise Exception("Your target is not observed by TESS, or maybe you need to run eleanor.Update()")
-        else:
-            print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors))
-
-        return sectors
+        return sectors_available
+    
+    else:
+        sectors_wanted = []
+        for sector in sectors:
+            if sector in sectors_available:
+                sectors_wanted.append(sector)
+        return sectors_wanted
