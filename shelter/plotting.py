@@ -220,8 +220,6 @@ def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=
             transit_times = get_transits_in_data(t, period, t0)
         else:
             raise Exception('Period/t0 or transit times must be provided')
-        
-    from shelter.colour import Colour, Gradient
 
     colour1 = Colour((122/255, 231/255, 199/255), 'sRGB')
     colour2 = Colour((224/255, 119/255, 125/255), 'sRGB')
@@ -306,7 +304,7 @@ def ax_stacked_histogram(ax, x, y, xlims=None, ylims=None, xbins=40, ybins=40, c
 # Periodograms                                                                 #
 # ---------------------------------------------------------------------------- #
 
-def ax_spectrum(ax, periods, power, period, planet=None):
+def ax_spectrum(ax, periods, power, period, planet=None, chunks=[]):
     vline_colour = '#40a1a1'
 
     if planet is not None:
@@ -322,28 +320,34 @@ def ax_spectrum(ax, periods, power, period, planet=None):
         ax.axvline(n*period, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
         ax.axvline(period / n, alpha=0.4, lw=1, linestyle="dashed", c=vline_colour)
 
+    for chunk in chunks:
+        ax.axvline(chunk[0], linestyle=':', alpha=0.4, lw=1, c="#a1409f")
+
     ax.plot(periods, power, color=plt.rcParams['axes.edgecolor'], lw=0.5)
 
     ax.set_ylabel(r'SDE')
     ax.set_xlabel('Period (days)')
     ax.set_xlim(np.min(periods), np.max(periods))
 
+def plot_spectrum(periods, power, period, planet=None, chunks=[], figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'spectrum.png'), **kwargs):
+    plot_axes(ax_spectrum, periods, power, period, planet, chunks, figsize=figsize, save=save, save_path=save_path, **kwargs)
+
 # TLS ------------------------------------------------------------------------ #
-def ax_TLS_spectrum(ax, tls_results, planet=None):
-    ax_spectrum(ax, tls_results.periods, tls_results.power, tls_results.period, planet)
+def ax_TLS_spectrum(ax, tls_results, planet=None, chunks=[]):
+    ax_spectrum(ax, tls_results.periods, tls_results.power, tls_results.period, planet, chunks)
     ax.set_title('TransitLeastSquares Power Spectrum')
 
-def plot_TLS_spectrum(tls_results, planet=None, figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'TLS_spectrum.png'), **kwargs):
-    plot_axes(ax_TLS_spectrum, tls_results, planet, figsize=figsize, save=save, save_path=save_path, **kwargs)
+def plot_TLS_spectrum(tls_results, planet=None, chunks=[], figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'TLS_spectrum.png'), **kwargs):
+    plot_axes(ax_TLS_spectrum, tls_results, planet, chunks, figsize=figsize, save=save, save_path=save_path, **kwargs)
 
 # BLS ------------------------------------------------------------------------ #
-def ax_BLS_spectrum(ax, bls_results, planet=None):
+def ax_BLS_spectrum(ax, bls_results, planet=None, chunks=[]):
     result_period = bls_results.period[np.argmax(bls_results.power)].value
-    ax_spectrum(ax, bls_results.period, bls_results.power, result_period, planet)
+    ax_spectrum(ax, bls_results.period, bls_results.power, result_period, planet, chunks)
     ax.set_title('BoxLeastSquares Power Spectrum')
 
-def plot_BLS_spectrum(bls_results, planet=None, figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'BLS_spectrum.png'), **kwargs):
-    plot_axes(ax_BLS_spectrum, bls_results, planet, figsize=figsize, save=save, save_path=save_path, **kwargs)
+def plot_BLS_spectrum(bls_results, planet=None, chunks=[], figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'BLS_spectrum.png'), **kwargs):
+    plot_axes(ax_BLS_spectrum, bls_results, planet, chunks, figsize=figsize, save=save, save_path=save_path, **kwargs)
 
 # ---------------------------------------------------------------------------- #
 # Dashboards                                                                   #
@@ -360,7 +364,7 @@ def title_text(ax, s, position=(0.5, 0.95), size='large', c='k', ec='w', **kwarg
             s, color=c, size=size, verticalalignment='top', horizontalalignment='center',
             path_effects=[withStroke(linewidth=3, foreground=ec, alpha=0.8)])
 
-def TLS_dashboard(tls_results, star, lc, save=False, save_path='', **kwargs):
+def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **kwargs):
     px = 1/plt.rcParams['figure.dpi']  # pixel in inches
 
     fig = plt.figure(figsize=(1320*px, 800*px))#, layout='constrained')
@@ -508,7 +512,7 @@ def TLS_dashboard(tls_results, star, lc, save=False, save_path='', **kwargs):
                 size='x-large', verticalalignment='center', horizontalalignment='center', linespacing=1)
 
     # Periodogram ------------------------------------------------------------ #
-    ax_TLS_spectrum(ax_spectrum, tls_results)
+    ax_TLS_spectrum(ax_spectrum, tls_results, chnuks=chunks)
 
     ax_spectrum.set_title('')
     title_text(ax_spectrum, 'TransitLeastSquares Periodogram')
@@ -533,6 +537,8 @@ def TLS_dashboard(tls_results, star, lc, save=False, save_path='', **kwargs):
 
     # Results box ------------------------------------------------------------ #
     ax_lightcurve(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
+
+    ax_results.set_ylim([0.8, 1.2])
 
     # Odd-even transits ------------------------------------------------------ #
     ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': 0.002})
