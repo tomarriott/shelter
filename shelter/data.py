@@ -840,9 +840,11 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
                             quality = datum.quality
                             q = np.where((quality & 481983 == 0), True, False)
 
-                            with np.printoptions(threshold=np.inf):
+                            '''
+                                with np.printoptions(threshold=np.inf):
                                 print(quality)
                                 print(q)
+                            '''
 
                             if len(q) != len(datum.time):
                                 q = np.bool(True) * np.ones(len(datum.time))
