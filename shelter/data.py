@@ -929,10 +929,7 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
 
             lcs.append(LightCurve(t, y, e, instrument=key, cadence=instrument_expt, sector=sector))
 
-        if len(lcs) == 1:
-            collections.append(lcs[0])
-        else:
-            collections.append(lcs)
+        collections.append(lcs)
 
     if len(collections) == 1:
         return collections[0]
