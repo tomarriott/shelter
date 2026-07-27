@@ -551,7 +551,8 @@ def get_transits_in_data(time, period, t0, epoch=0):
     return valid_transits
 
 
-def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
+def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=None,
+                   missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
                    overwrite=False, save_format='pickle', system=None, mask_transits=False, mask_tolerance=4):
     """
     Function to query and download lightcurves from space telescopes.
@@ -561,8 +562,12 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
     ----------
     system_name : string
         Name of the system to search
-    lc_directory : string
+    lc_directory : string, optional
         Filepath to save the lightcurves to, or to retrieve the lightcurves from.
+    cache_directory: string or None, optional
+        Filepath pointing to internal data cache.
+        If None, the default directory for lightkurve/eleanor cache will be used
+        If 
     missions : string or list, {'Kepler', 'K2', 'TESS'}
         The space missions to pull data from.
     authors : dict, optional
@@ -712,7 +717,14 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
                 import lightkurve as lk
             except ImportError:
                 print("Lightkurve is not installed! Skipping download")
-            else:    
+            else:  
+
+                if cache_directory is not None:
+                    lightkurve_cache = os.path.join(cache_directory, 'lightkurve')
+                    if not os.path.exists(lightkurve_cache):
+                        os.makedirs(lightkurve_cache)
+                    lk.conf.cache_dir = lightkurve_cache
+
                 for mission in missions:
                     for author in authors[mission]:
                         for cadence in cadences[mission][author]:
@@ -807,6 +819,28 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
 
                 epoch = get_epoch('TESS')
 
+                # Set up cache ----------------------------------------------- #
+                if cache_directory is not None:
+                    eleanor_cache = os.path.join(cache_directory, 'eleanor')
+                    fn_dir   = os.path.join(eleanor_cache, 'fn')
+                    post_dir = os.path.join(eleanor_cache, 'post')
+                    pm_dir   = os.path.join(eleanor_cache, 'pm')
+                    meta_dir = os.path.join(eleanor_cache, 'metadata')
+
+                    if not os.path.exists(eleanor_cache):
+                        os.makedirs(eleanor_cache)
+                    if not os.path.exists(fn_dir):
+                        os.makedirs(fn_dir)
+                    if not os.path.exists(post_dir):
+                        os.makedirs(post_dir)
+                    if not os.path.exists(pm_dir):
+                        os.makedirs(pm_dir)
+                else:
+                    eleanor_cache = None
+                    fn_dir   = None
+                    post_dir = None
+                    pm_dir   = None
+
                 # Exclude sectors available from MAST if requested ----------- #
                 if fill_gaps:
                     sectors_downloaded = []
@@ -826,12 +860,16 @@ def get_lightcurve(system_name, lc_directory=get_directory(), missions=[], autho
                         print(sector)
                         try:
                             star_sector = eleanor.Source(
-                                name=system_name, sector=sector
+                                name     = system_name,
+                                sector   = sector,
+                                fn_dir   = fn_dir,
+                                post_dir = post_dir,
+                                pm_dir   = pm_dir,
                             )
                             datum = eleanor.TargetData(
                                 star_sector,
-                                do_psf=(flux_type == 'psf'),
-                                do_pca=(flux_type in ('pca', 'corr')),
+                                do_psf   = (flux_type == 'psf'),
+                                do_pca   = (flux_type in ('pca', 'corr')),
                             )
                             #datum.save()  # Cache locally so re-runs are fast
                             # except it doesn't work right now - issue with eleanor, not this
