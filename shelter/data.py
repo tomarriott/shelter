@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from .utils import to_list_of_arrays, get_epoch
+from .utils import to_list_of_arrays, get_epoch, extract_kwargs
 from .io import get_directory
 import traceback
 # from dataclasses import dataclass, field
@@ -133,10 +133,37 @@ class LightCurve(TimeSeries):
                 import wotan
             except ImportError:
                 print('Wotan is not installed! Using [method] for now.')
+            else:
+                wotan_kwargs = extract_kwargs(wotan.flatten, kwargs)
 
-            for wind in window:
-                y_flat = wotan.flatten(self.t, self.y, window_length=wind, **kwargs)
-                return_obj.append(LightCurve(self.t, y_flat, self.e, self.instrument, self.cadence))
+                for wind in window:
+                    y_flat = wotan.flatten(self.t, self.y, window_length=wind, **wotan_kwargs)
+                    return_obj.append(LightCurve(self.t, y_flat, self.e, self.instrument, self.cadence))
+
+        if single:
+            return return_obj[0]
+        return return_obj
+
+    def clip(self, window, function='wotan', **kwargs):
+                
+        if isinstance(window, float) or isinstance(window, int):
+            window = [window]
+            single = True
+        
+        # object to store lightcurves in if multiple window lengths ---------- #
+        return_obj = DataCollection()
+
+        if function == 'wotan':
+            try:
+                import wotan
+            except ImportError:
+                print('Wotan is not installed! Using [method] for now.')
+            else:
+                wotan_kwargs = extract_kwargs(wotan.slide_clip, kwargs)
+
+                for wind in window:
+                    y_clip = wotan.slide_clip(self.t, self.y, window_length=wind, **wotan_kwargs)
+                    return_obj.append(LightCurve(self.t, y_clip, self.e, self.instrument, self.cadence))
 
         if single:
             return return_obj[0]
@@ -755,16 +782,15 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
 
                             # Download and stitch lightcurves ---------------- #
                             lc_collection = search_result.download_all()
-                            for lc in lc_collection:
-                                epoch = get_epoch(mission)
-                                lc.time = lc.time + epoch  # Adjust time to absolute BJD
-
                             if select != 'all':
                                 lc_collection = lc_collection[select]
                             if isinstance(select, int):
                                 lc_collection = [lc_collection]
 
                             for lc in lc_collection:
+                                epoch = get_epoch(mission)
+                                lc.time = lc.time + epoch  # Adjust time to absolute BJD
+
                                 sector = getattr(lc, sector_keys[mission])
                                 lc = lc.remove_nans().normalize()
 
