@@ -579,7 +579,8 @@ def get_transits_in_data(time, period, t0, epoch=0):
 
 
 def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=None,
-                   missions=[], authors=[], cadences='longest', selection='all', extract_ffi=False, fill_gaps=False,
+                   missions=[], authors=[], cadences='longest', selection='all',
+                   extract_ffi=False, fill_gaps=False, tic=None, coords=None,
                    overwrite=False, save_format='pickle', system=None, mask_transits=False, mask_tolerance=4):
     """
     Function to query and download lightcurves from space telescopes.
@@ -837,7 +838,12 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
 
                 # Resolve the target and find available sectors -------------- #
                 try:
-                    sectors_available = eleanor_observed_sectors(name=system_name, sectors=selection)
+                    sectors_available = eleanor_observed_sectors(
+                        tic     =tic,
+                        coords  =coords,
+                        name    =system_name,
+                        sectors =selection
+                    )
                 except Exception as exc:
                     sectors_available = []
                     traceback.print_exc()
@@ -886,6 +892,8 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                         print(sector)
                         try:
                             star_sector = eleanor.Source(
+                                tic      = tic,
+                                coords   = coords,
                                 name     = system_name,
                                 sector   = sector,
                                 fn_dir   = fn_dir,
