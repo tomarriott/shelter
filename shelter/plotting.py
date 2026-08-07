@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -12,9 +13,10 @@ from .io import get_directory, find_path
 from .colour import Colour, Gradient
 
 def use_custom_styles():
-    plt.style.use(find_path('styles/light_style.mplstyle'))
-    plt.style.use(find_path('styles/use_serif.mplstyle'))
-    plt.style.use(find_path('styles/paper_text.mplstyle'))
+    module_dir = Path(__file__).resolve().parent
+    plt.style.use(module_dir / 'styles/light_style.mplstyle')
+    plt.style.use(module_dir / 'styles/use_serif.mplstyle')
+    plt.style.use(module_dir / 'styles/paper_text.mplstyle')
 
 def light_style():
     plt.style.use(find_path('styles/light_style.mplstyle'))
