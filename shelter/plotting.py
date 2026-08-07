@@ -753,11 +753,11 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     title_text(ax_phase, f'$\delta = {(1 - tls_results.depth_mean[0])*1e2:.1f} \pm {tls_results.depth_mean[1]*1e2:.1f}$ %', size='medium', position=(0.5, 0.85))
 
     # Results box ------------------------------------------------------------ #
-    axes_results = ax_lightcurve_broken(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
+    axes_results = ax_lightcurve_broken(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0), break_gap=10)
 
     for ax in axes_results:
         #ax_results.set_xlim([lc.t[0], lc.t[-1]])
-        ax.set_ylim([1 - (2 * np.std(lc.y)), 1 + (2 * np.std(lc.y))])
+        ax.set_ylim([1 - (3 * np.std(lc.y)), 1 + (3 * np.std(lc.y))])
 
     # Odd-even transits ------------------------------------------------------ #
     ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
