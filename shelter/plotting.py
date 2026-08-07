@@ -597,11 +597,11 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     else:
         duration = tls_results['duration']
 
-    #snr = tls_results.snr / np.sqrt(tls_results.duration / duration)
-    datapoints_intransit = tls_results.in_transit_count * tls_results.distinct_transit_count
-    noise = np.mean(lc.e)
-    depth = (1 - tls_results.depth)
-    snr = (depth/noise) * (datapoints_intransit)**0.5
+    snr = tls_results.snr / np.sqrt(tls_results.duration / duration)
+    #datapoints_intransit = tls_results.in_transit_count * tls_results.distinct_transit_count
+    #noise = np.mean(lc.e)
+    #depth = (1 - tls_results.depth)
+    #snr = (depth/noise) * (datapoints_intransit)**0.5
 
     if snr >= 5:
         snr_colour = '#40a140'
