@@ -1,4 +1,5 @@
 import os
+import traceback
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -571,10 +572,16 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     title_text(ax_spectrum, 'TransitLeastSquares Periodogram')
 
     # Nearby stars ----------------------------------------------------------- #
-    from .tpfplotter.tpfplotter import plot_tpf
+    try:
+        from .tpfplotter.tpfplotter import plot_tpf
 
-    #tic=system.name.replace('TIC ', '')
-    plot_tpf(tic=str(star.name), ax=ax_neighborhood)
+        #tic=system.name.replace('TIC ', '')
+        plot_tpf(tic=str(star.name), ax=ax_neighborhood)
+    except Exception as e:
+        print(f'Error making tpfplot for {star.name}: {e}')
+        traceback.print_exc()
+        title_text(ax_neighborhood, 'TPFplot broke :(', position=(0.5, 0.5))
+
     # Phasefold -------------------------------------------------------------- #
     xlims = -(2 * duration)/(tls_results.period), (2 * duration)/(tls_results.period)
     ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
@@ -593,7 +600,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_lightcurve(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
 
     ax_results.set_xlim([lc.t[0], lc.t[-1]])
-    ax_results.set_ylim([0.9, 1.1])
+    ax_results.set_ylim([1 - (2 * np.std(lc.y)), 1 + (2 * np.std(lc.y))])
 
     # Odd-even transits ------------------------------------------------------ #
     ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
@@ -625,7 +632,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
 
     if save:
         savefig_args = extract_kwargs(plt.savefig, kwargs)
-        plt.savefig(save_path, **savefig_args)
+        plt.savefig(save_path, transparent=False)
 
 # Get rid of later, just a hack
 def plot_tpf(tic, ax, **kwargs):
