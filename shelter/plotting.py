@@ -279,10 +279,10 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     for i, sub_ax in enumerate(axes):
         if i > 0:
             sub_ax.spines['left'].set_visible(False)
-            sub_ax.tick_params(labelleft=False, left=False)
+            sub_ax.tick_params(labelleft=False, left=False, which='both')
         if i < n_seg - 1:
             sub_ax.spines['right'].set_visible(False)
-            sub_ax.tick_params(right=False)
+            sub_ax.tick_params(right=False, which='both')
 
     # diagonal break marks at each seam (standard matplotlib "broken axis" recipe)
     d = 0.015 * break_mark_size / 0.4  # scale relative to default break_mark_size=0.4
