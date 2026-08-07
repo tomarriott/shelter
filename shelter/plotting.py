@@ -138,7 +138,7 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
         transit_times = np.array(transit_times)
 
     for transit in transit_times:
-        ax.axvline(transit, c='#40a1a1', alpha=0.5, zorder=0, linestyle='--')
+        ax.axvline(transit, c='#40a1a1', alpha=0.5, zorder=4, linestyle='--')
 
     if plot_bin:
         t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
@@ -147,6 +147,162 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 
     ax.set_xlabel('Time (BJD)')
     ax.set_ylabel('Flux')
+
+
+def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
+                   break_gap=None, break_factor=10, break_wspace=0.03,
+                   break_mark_size=0.4, min_seg_width_frac=0.06,
+                   data_errorbar_args={'ms': 1, 'ls': 'none', 'c': '#f04f4f', 'fmt': 'o',
+                                        'mfc': '#f04f4f', 'mec': '#4f2020', 'alpha': 0.5, 'zorder': 2},
+                   bin_data_args={},
+                   bin_errorbar_args={'ms': 4, 'capsize': 2, 'elinewidth': 1, 'fmt': 'o',
+                                       'mfc': 'w', 'mec': 'k', 'ecolor': 'k', 'zorder': 20},
+                   **kwargs):
+    """
+    Plot a lightcurve, automatically breaking the x-axis across large gaps in `t`
+    so sparse/clustered data isn't dominated by empty space.
+
+    Extra parameters vs. the original version
+    -------------------------------------------
+    break_gap : float or None
+        Minimum size of a gap in `t` (same units as `t`) that triggers a break.
+        If None, it's set automatically as `break_factor * median(diff(t))`.
+    break_factor : float
+        Multiplier on the median cadence used to auto-detect gaps when
+        `break_gap` is None.
+    break_wspace : float
+        Horizontal spacing (as a GridSpec `wspace` fraction) left between
+        broken-axis segments.
+    break_mark_size : float
+        Size of the diagonal "break" marks drawn at each seam, in units of
+        the segment's own axes fraction.
+    min_seg_width_frac : float
+        Minimum width (as a fraction of the widest segment's time span)
+        allotted to any one segment, so very short/dense clusters of points
+        still get a visible panel.
+
+    Returns
+    -------
+    axes : list of matplotlib.axes.Axes
+        The axes used for plotting, left to right. If no gap was found this
+        is a single-element list containing the original `ax`.
+    """
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    yerr = np.zeros_like(t) if yerr is None else np.asarray(yerr, dtype=float)
+
+    # sort by time (errorbar/bin_data assume increasing t for gap detection)
+    order = np.argsort(t)
+    t_s, y_s, yerr_s = t[order], y[order], yerr[order]
+
+    if isinstance(transit_times, dict):
+        transit_times = transit_times.values()
+    transit_times = np.array(list(transit_times))
+
+    if plot_bin:
+        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
+        t_bin = np.asarray(t_bin)
+        bin_order = np.argsort(t_bin)
+        t_bin, y_bin, yerr_bin = t_bin[bin_order], np.asarray(y_bin)[bin_order], np.asarray(yerr_bin)[bin_order]
+
+    # --- detect gaps ---
+    diffs = np.diff(t_s)
+    if len(diffs) == 0:
+        gap_idx = np.array([], dtype=int)
+    else:
+        thresh = break_gap if break_gap is not None else break_factor * np.median(diffs)
+        gap_idx = np.where(diffs > thresh)[0]
+
+    split_points = gap_idx + 1
+    t_segs = np.split(t_s, split_points)
+    y_segs = np.split(y_s, split_points)
+    yerr_segs = np.split(yerr_s, split_points)
+    n_seg = len(t_segs)
+
+    def _plot_data(a, tt, yy, ye):
+        a.errorbar(tt, yy, yerr=ye, **data_errorbar_args)
+        for transit in transit_times:
+            a.axvline(transit, c='#40a1a1', alpha=0.5, zorder=4, linestyle='--')
+
+    # --- no gap found: behave exactly like the original single-axes version ---
+    if n_seg == 1:
+        if ax is None:
+            ax = plt.axes()
+        _plot_data(ax, t_segs[0], y_segs[0], yerr_segs[0])
+        if plot_bin:
+            ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_args)
+        ax.set_xlabel('Time (BJD)')
+        ax.set_ylabel('Flux')
+        return [ax]
+
+    # --- multiple segments: rebuild `ax`'s slot as a row of sub-axes ---
+    if ax is None:
+        ax = plt.axes()
+    fig = ax.figure
+
+    try:
+        subspec = ax.get_subplotspec()
+    except AttributeError:
+        subspec = None
+    pos = ax.get_position()
+    ax.remove()
+
+    spans = np.array([seg[-1] - seg[0] if len(seg) > 1 else 0.0 for seg in t_segs])
+    max_span = spans.max() if spans.max() > 0 else 1.0
+    width_ratios = np.clip(spans, min_seg_width_frac * max_span, None)
+    width_ratios = width_ratios / width_ratios.sum()
+
+    if subspec is not None:
+        gs = GridSpecFromSubplotSpec(1, n_seg, subplot_spec=subspec,
+                                      width_ratios=width_ratios, wspace=break_wspace)
+    else:
+        gs = GridSpec(1, n_seg, width_ratios=width_ratios, wspace=break_wspace,
+                       left=pos.x0, right=pos.x1, bottom=pos.y0, top=pos.y1)
+
+    axes = []
+    for i in range(n_seg):
+        sub_ax = fig.add_subplot(gs[0, i], sharey=axes[0] if axes else None)
+        axes.append(sub_ax)
+
+    for i, sub_ax in enumerate(axes):
+        _plot_data(sub_ax, t_segs[i], y_segs[i], yerr_segs[i])
+        if plot_bin:
+            mask = (t_bin >= t_segs[i][0]) & (t_bin <= t_segs[i][-1])
+            if mask.any():
+                sub_ax.errorbar(t_bin[mask], y_bin[mask], yerr_bin[mask], **bin_errorbar_args)
+
+        span = t_segs[i][-1] - t_segs[i][0] if len(t_segs[i]) > 1 else 1.0
+        pad = max(span * 0.05, 1e-6)
+        sub_ax.set_xlim(t_segs[i][0] - pad, t_segs[i][-1] + pad)
+
+    # hide the "inner" spines/ticks so it reads as one broken panel
+    for i, sub_ax in enumerate(axes):
+        if i > 0:
+            sub_ax.spines['left'].set_visible(False)
+            sub_ax.tick_params(labelleft=False, left=False)
+        if i < n_seg - 1:
+            sub_ax.spines['right'].set_visible(False)
+            sub_ax.tick_params(right=False)
+
+    # diagonal break marks at each seam (standard matplotlib "broken axis" recipe)
+    d = 0.015 * break_mark_size / 0.4  # scale relative to default break_mark_size=0.4
+    for i in range(n_seg - 1):
+        left_ax, right_ax = axes[i], axes[i + 1]
+        mark_kwargs = dict(color='k', clip_on=False, lw=1)
+        left_ax.plot((1 - d, 1 + d), (-d, +d), transform=left_ax.transAxes, **mark_kwargs)
+        left_ax.plot((1 - d, 1 + d), (1 - d, 1 + d), transform=left_ax.transAxes, **mark_kwargs)
+        right_ax.plot((-d, +d), (-d, +d), transform=right_ax.transAxes, **mark_kwargs)
+        right_ax.plot((-d, +d), (1 - d, 1 + d), transform=right_ax.transAxes, **mark_kwargs)
+
+    axes[0].set_ylabel('Flux')
+    # centered x-label across the whole panel group
+    fig.canvas.draw()
+    x0 = axes[0].get_position().x0
+    x1 = axes[-1].get_position().x1
+    y0 = axes[0].get_position().y0
+    fig.text((x0 + x1) / 2, y0 - 0.08, 'Time (BJD)', ha='center', va='top')
+
+    return axes
 
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
@@ -586,7 +742,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     xlims = -(2 * duration)/(tls_results.period), (2 * duration)/(tls_results.period)
     ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
 
-    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
+    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/20})
     residual_line(ax_phase, tls_results.depth_mean[0], tls_results.depth_mean[1])
     ax_phase.plot(tls_results.model_folded_phase - 0.5, tls_results.model_folded_model, c='#40A1A1', linestyle='-', zorder=10, path_effects=[Stroke(linewidth=3, foreground='w', alpha=0.5), Normal()])
 
@@ -597,10 +753,11 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     title_text(ax_phase, f'$\delta = {(1 - tls_results.depth_mean[0])*1e2:.1f} \pm {tls_results.depth_mean[1]*1e2:.1f}$ %', size='medium', position=(0.5, 0.85))
 
     # Results box ------------------------------------------------------------ #
-    ax_lightcurve(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
+    axes_results = ax_lightcurve_broken(ax_results, lc.t, lc.y, lc.e, transit_times=get_transits_in_data(lc.t, tls_results.period, tls_results.T0))
 
-    ax_results.set_xlim([lc.t[0], lc.t[-1]])
-    ax_results.set_ylim([1 - (2 * np.std(lc.y)), 1 + (2 * np.std(lc.y))])
+    for ax in axes_results:
+        #ax_results.set_xlim([lc.t[0], lc.t[-1]])
+        ax.set_ylim([1 - (2 * np.std(lc.y)), 1 + (2 * np.std(lc.y))])
 
     # Odd-even transits ------------------------------------------------------ #
     ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
