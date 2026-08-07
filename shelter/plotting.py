@@ -7,7 +7,7 @@ from matplotlib.patches import FancyBboxPatch
 from matplotlib.ticker import NullLocator
 from matplotlib.patheffects import Stroke, Normal, withStroke
 from .utils import extract_kwargs
-from .data import bin_data, fold_data, get_transits_in_data
+from .data import bin_data, fold_data, get_transits_in_data, is_within_observed_data
 from .io import get_directory, find_path
 from .colour import Colour, Gradient
 
@@ -33,6 +33,8 @@ def paper_style():
 
 def talk_style():
     plt.style.use(find_path('styles/talk_text.mplstyle'))
+
+use_custom_styles()
 
 ################################################################################
 # - PLOTTING DATA ------------------------------------------------------------ #
@@ -117,7 +119,7 @@ def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2=
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
                   data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
                   bin_data_args={},
-                  bin_errorbar_args={},
+                  bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                   **kwargs):
     if ax is None:
         ax = plt.axes()
@@ -138,7 +140,7 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     if plot_bin:
         t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
 
-        ax.errorbar(t_bin, y_bin, yerr_bin, ms=4, capsize=2, elinewidth=1, fmt='o', mfc='w', mec='k', ecolor='k', zorder=20, **bin_errorbar_args)
+        ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_args)
 
     ax.set_xlabel('Time (BJD)')
     ax.set_ylabel('Flux')
@@ -148,12 +150,42 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
                     figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
                     data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
                     bin_data_args={},
-                    bin_errorbar_args={},
+                    bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                     **kwargs):
     plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin,
               figsize=figsize, save=save, save_path=save_path,
               data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
 
+
+def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
+    colour1 = Colour((122/255, 231/255, 199/255), 'sRGB')
+    colour2 = Colour((224/255, 119/255, 125/255), 'sRGB')
+    colour3 = Colour((244/255, 211/255, 94/255), 'sRGB')
+    colour4 = Colour((172/255, 148/255, 247/255), 'sRGB')
+    #print(colour1, colour2, colour3, colour4)
+    gradient = Gradient([colour2, colour3, colour1, colour4], [0, .3, .7, 1], interp_space='Oklab')
+
+    for i, lc in enumerate(lcs):
+        t = lc.t * 1
+        y = lc.y * 1
+        e = lc.e * 1
+        
+        y += (i * offset)
+        t0 = t[0]
+        t += (-t0)
+
+        position = i / len(lcs)
+        c = gradient.sample(position, position, 1, output_space='Hex', return_alpha=False)[0]
+
+        ax_lightcurve(ax, t, y, e,
+                       data_errorbar_args={'c': c, 'mfc': 'w', 'mec': c, 'ms': 2, 'ls': 'none', 'fmt': 'o', 'alpha': 1, 'zorder': 2})
+
+        for n in transit_times.keys():
+            if is_within_observed_data(transit_times[n] - t0, t):
+                ax.scatter(transit_times[n] - t0, 1 + (i * offset), marker='o', c='w', ec='k', s=20, zorder=20)
+
+        ax.set_xlabel('Time since start (BJD)')
+        ax.set_ylabel('Flux + offset')
 
 # ---------------------------------------------------------------------------- #
 # Phasefold plotting                                                           #
@@ -162,7 +194,7 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
 def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
                  data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
                  bin_data_args={'n_points': 200},
-                 bin_errorbar_args={},
+                 bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                  **kwargs):
     ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin,
                   data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
@@ -180,15 +212,15 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
 def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
                    data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
                    bin_data_args={'n_points': 200},
-                   bin_errorbar_args={},
+                   bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                    **kwargs):
-    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, bin_data_args, data_errorbar_args, bin_errorbar_args, **kwargs)
+    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, data_errorbar_args, bin_data_args, bin_errorbar_args, **kwargs)
 
 
 def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
                data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
                bin_data_args={'n_points': 200},
-               bin_errorbar_args={},
+               bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                **kwargs):
     axes = split_axis(ax, nrows=1, ncols=2, share='none', hspace=0, wspace=0)
 
@@ -213,7 +245,7 @@ def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
 def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, transit_times={}, offset=0.2, plot_bin=False, 
                 data_errorbar_args={'ms':2, 'fmt':'o', 'mew':1, 'alpha':1, 'zorder':2,},
                 bin_data_args={'n_points': 200},
-                bin_errorbar_args={},
+                bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
                 **kwargs):
     if len(transit_times) == 0:
         if (period is not None) and (t0 is not None):
@@ -225,9 +257,14 @@ def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=
     colour2 = Colour((224/255, 119/255, 125/255), 'sRGB')
     colour3 = Colour((244/255, 211/255, 94/255), 'sRGB')
     colour4 = Colour((172/255, 148/255, 247/255), 'sRGB')
-    #print(colour1, colour2, colour3, colour4)
-    gradient = Gradient([colour2, colour3, colour1, colour4], [0, .3, .7, 1], interp_space='Oklab')
-    #print(gradient)
+    gradient1 = Gradient([colour2, colour3, colour1, colour4], [0, .3, .7, 1], interp_space='Oklab')
+    print(gradient1)
+
+    colour5 = Colour((122/255, 231/255, 199/255), 'sRGB')
+    colour6 = Colour((224/255, 119/255, 125/255), 'sRGB')
+    colour7 = Colour((244/255, 211/255, 94/255), 'sRGB')
+    colour8 = Colour((172/255, 148/255, 247/255), 'sRGB')
+    gradient2 = Gradient([colour6, colour7, colour5, colour8], [0, .3, .7, 1], interp_space='Oklab')
 
     if period is None:
         period = np.min(np.array(transit_times.values()).diff())
@@ -240,11 +277,12 @@ def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=
         lc_slice = np.logical_and(t >= min_orbit, t < max_orbit)
 
         position = (n - min(transit_times.keys())) / max(transit_times.keys())
-        c = gradient.sample(position, position, 1, output_space='Hex', return_alpha=False)
+        c1 = gradient1.sample(position, position, 1, output_space='Hex', return_alpha=False)[0]
 
         ax_lightcurve(ax, *fold_data(t[lc_slice], y[lc_slice]+(i*offset), yerr[lc_slice], period, t0),
-                      c=c, mfc='w', mec=c,
-                      data_errorbar_args=data_errorbar_args)
+                      data_errorbar_args={'c': c1, 'mfc': 'w', 'mec': c1, 'ms': 2, 'ls': 'none', 'fmt': 'o', 'alpha': 1, 'zorder': 2},)
+
+    ax.set_xlabel('Phase')
 
     if (period is not None) and (duration is not None):
         xlims = -duration/(period), duration/(period)
@@ -252,7 +290,6 @@ def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=
     if depth is not None:
         ylims = -3*depth + 1, 2*depth + 1 + (len(transit_times)*offset)
         ax.set_ylim(ylims)
-
 
 # ---------------------------------------------------------------------------- #
 # Histograms                                                                   #
@@ -365,6 +402,14 @@ def title_text(ax, s, position=(0.5, 0.95), size='large', c='k', ec='w', **kwarg
             path_effects=[withStroke(linewidth=3, foreground=ec, alpha=0.8)])
 
 def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **kwargs):
+    from .utils import get_alias_mask
+
+    alias_mask = get_alias_mask(tls_results.periods, tls_results.period, 0.1)
+    masked_SDE = tls_results.power[~alias_mask]
+    masked_SDE_raw = tls_results.power_raw[~alias_mask]
+    prominence = tls_results.SDE - np.max(masked_SDE)
+    prominence_raw = np.max(tls_results.power_raw) - np.max(masked_SDE_raw)
+
     px = 1/plt.rcParams['figure.dpi']  # pixel in inches
 
     fig = plt.figure(figsize=(1320*px, 800*px))#, layout='constrained')
@@ -385,14 +430,20 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_results = fig.add_subplot(gs_right[0])
 
     # Sort out other quantities ---------------------------------------------- #
-    intransit_folded_model = np.where(tls_results['model_folded_model'] < 1.)[0]
+    
+    intransit_folded_model = np.where(tls_results['model_folded_model'] < 1)[0]
     if len(intransit_folded_model) > 1:
         duration = tls_results['period'] * (tls_results['model_folded_phase'][intransit_folded_model[-1]]
                                          -  tls_results['model_folded_phase'][intransit_folded_model[0]])
     else:
         duration = tls_results['duration']
 
-    snr = tls_results.snr / np.sqrt(tls_results.duration / duration)
+    #snr = tls_results.snr / np.sqrt(tls_results.duration / duration)
+    datapoints_intransit = tls_results.in_transit_count * tls_results.distinct_transit_count
+    noise = np.mean(lc.e)
+    depth = (1 - tls_results.depth)
+    snr = (depth/noise) * (datapoints_intransit)**0.5
+
     if snr >= 5:
         snr_colour = '#40a140'
     else:
@@ -499,7 +550,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_info.text(20/240, 250/900, 'SDE:\nProminence:\nSDE raw:\nProm. raw:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 250/900, f'{tls_results.SDE:.2f}\n{tls_results.prominence:.2f}\n{tls_results.SDE_raw:.2f}\n{tls_results.prominence_raw:.2f}',
+    ax_info.text(220/240, 250/900, f'{tls_results.SDE:.2f}\n{prominence:.2f}\n{tls_results.SDE_raw:.2f}\n{prominence_raw:.2f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
     ax_info.text(20/240, 80/900, 'Period (d):\nt0:\nDuration (h):\nDepth (%):\nRp/R*',
@@ -523,12 +574,13 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     #tic=system.name.replace('TIC ', '')
     plot_tpf(tic=str(star.name), ax=ax_neighborhood)
     # Phasefold -------------------------------------------------------------- #
-    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': 0.001})
+    xlims = -(2 * duration)/(tls_results.period), (2 * duration)/(tls_results.period)
+    ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
+
+    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
     residual_line(ax_phase, tls_results.depth_mean[0], tls_results.depth_mean[1])
     ax_phase.plot(tls_results.model_folded_phase - 0.5, tls_results.model_folded_model, c='#40A1A1', linestyle='-', zorder=10, path_effects=[Stroke(linewidth=3, foreground='w', alpha=0.5), Normal()])
 
-    xlims = -duration/(tls_results.period), duration/(tls_results.period)
-    ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
     ax_phase.set_xlim(xlims)
     ax_phase.set_ylim(ylims)
 
@@ -542,7 +594,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_results.set_ylim([0.9, 1.1])
 
     # Odd-even transits ------------------------------------------------------ #
-    ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': 0.002})
+    ax_odd_even, axes = ax_oddeven(ax_odd_even, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/10})
 
     residual_line(axes[0], tls_results.depth_mean_odd[0], tls_results.depth_mean_odd[1])
     residual_line(axes[1], tls_results.depth_mean_even[0], tls_results.depth_mean_even[1])
@@ -572,3 +624,9 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     if save:
         savefig_args = extract_kwargs(plt.savefig, kwargs)
         plt.savefig(save_path, **savefig_args)
+
+# Get rid of later, just a hack
+def plot_tpf(tic, ax, **kwargs):
+    from .tpfplotter.tpfplotter import plot_tpf as tpfplot
+
+    tpfplot(tic=tic, ax=ax, **kwargs)

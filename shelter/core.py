@@ -12,6 +12,7 @@ from astropy.table import Table
 import matplotlib.pyplot as plt
 #import gaia_query as gaia
 from pathlib import Path
+#import importlib.resources as impresources
 
 from .io import *
 from .mappings import *
@@ -86,8 +87,8 @@ def merge_tables(id, input_data, filepath=None):
     data = input_data.to_pandas()
 
     if mission == 'Kepler':
-        file = 'shelter/data_dump/KOI list.csv'
-        file_df = read_csv(file, skiprows=53)
+        file = './shelter/data_dump/KOI list.csv'
+        file_df = pd.read_csv(file, skiprows=53)
         file_df = file_df[file_df['koi_disposition'] != 'FALSE POSITIVE']
         file_df = file_df[file_df.kepid == int(id.lstrip('KIC '))].reset_index()
 
@@ -126,8 +127,8 @@ def merge_tables(id, input_data, filepath=None):
         })
 
     if mission == 'TESS':
-        file = 'shelter/data_dump/TOI list.csv'
-        file_df = read_csv(file, skiprows=69)
+        file = '/Users/trm143@student.bham.ac.uk/Documents/Code/shelter/shelter/data_dump/TOI list.csv'
+        file_df = pd.read_csv(file, skiprows=69)
         file_df = file_df[file_df['tfopwg_disp'] != ('FP' or 'FA')]
         file_df = file_df[np.round(file_df.toi.to_numpy(), 0) == int(id.lstrip('TOI-'))].reset_index()
 
@@ -771,9 +772,9 @@ class System(ParameterContainer):
     # ------------------------------------------------------------------------ #
 
     # Lightcurves ------------------------------------------------------------ #
-    def get_lightcurve(self, lc_directory, missions, **kwargs):
+    def get_lightcurve(self, **kwargs):
         from .data import get_lightcurve
-        self.lc = get_lightcurve(self.name, lc_directory, missions, system=self, **kwargs)
+        self.lc = get_lightcurve(self.name, system=self, **kwargs)
         return self.lc
     
     # Transit search --------------------------------------------------------- #
@@ -782,7 +783,7 @@ class System(ParameterContainer):
             pass
 
     # Conveniences ----------------------------------------------------------- #
-    def to_obsidian(self, filepath=None):
+    def to_obsidian(self, filepath=''):
         
         yaml = f'\
 ---\n\

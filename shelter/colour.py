@@ -21,7 +21,7 @@ def coloured_square(hex_string, print_hex=True):
     else:
         return f"\033[48:2::{red}:{green}:{blue}m \033[49m"
 
-# ---------------- Conversion Functions ----------------
+# Conversion Functions ------------------------------------------------------- #
 
 # TODO: fix all the below to allow alpha channels
 
@@ -336,7 +336,7 @@ def convert_colour(value, input_space, output_space, clip=False):
         value = np.clip(value, a_min=0, a_max=1)
     return value
 
-# ---------------- Colour Class ----------------
+# Colour Class --------------------------------------------------------------- #
 
 class Colour:
     """A class for storing and manipulating colours."""
@@ -414,7 +414,7 @@ class Colour_Stop(Colour):
         super().__init__(value, space, alpha)
         self.position = position
 
-# ---------------- Gradient Class ----------------
+# Gradient Class ------------------------------------------------------------- #
 
 class Gradient:
     """A class for creating gradients through a desired colour space."""
@@ -470,7 +470,7 @@ class Gradient:
         str = ""
         for hex in hexes:
             str += coloured_square(hex, print_hex=False)
-        return f"Gradient()\n{str}"
+        return f"Gradient({str})"
 
     def _pick_gradient(self, t):
         """
@@ -701,9 +701,11 @@ print(gradient.colours)
 print([colour.get_colour(gradient._interp_space) for colour in gradient.colours])
 '''
 
-# ---------------- Image Filtering ----------------
+# ---------------------------------------------------------------------------- #
+# Image Filtering                                                              #
+# ---------------------------------------------------------------------------- #
 
-## ---------------- Clustering ----------------
+# Clustering ----------------------------------------------------------------- #
 
 def k_means_clustering(data, n_clusters=8, n_runs=1, seed=None, **kwargs):
     """

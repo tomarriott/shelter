@@ -1,4 +1,6 @@
 import os
+import copy
+import warnings
 import numpy as np
 from .utils import to_list_of_arrays, get_epoch, extract_kwargs
 from .io import get_directory
@@ -19,8 +21,11 @@ class TimeSeries:
 
         self.t = np.asanyarray(t)
         self.y = np.asanyarray(y)
-        if len(e) != len(y):
-            e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=np.std(y)).reshape(len(y))
+        if e is not np.nan:
+            if len(e) != len(y):
+                e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=np.std(y)).reshape(len(y))
+        else:
+            e = np.ones(len(y)) * e
         self.e = e
 
         self.N = len(t)
@@ -49,6 +54,9 @@ class TimeSeries:
             raise IndexError(
                 "only integers, slices (`:`) and integer or boolean arrays are valid indices"
             )
+        
+    def copy(self):
+        return copy.copy(self)
 
     def append(self, t, y, e=[]):
         if len(t) != len(y):
@@ -65,7 +73,9 @@ class TimeSeries:
 
     def fold(self, period, t0=None):
         fold_t, fold_y, fold_e = fold_data(self.t, self.y, self.e, period, t0)
-        folded_lightcurve = LightCurve(fold_t, fold_y, fold_e, self.instrument)
+
+        folded_lightcurve = self.copy()
+        folded_lightcurve.t, folded_lightcurve.y, folded_lightcurve.e = fold_t, fold_y, fold_e
         folded_lightcurve.period = period
         folded_lightcurve.t0 = t0
 
@@ -73,9 +83,41 @@ class TimeSeries:
     
     def bin(self, n_points=None, n_bins=None, t_bins=None, method='mean'):
         bin_t, bin_y, bin_e = bin_data(*self.order_data(), n_points, n_bins, t_bins, method)
-        binned_lightcurve = LightCurve(bin_t, bin_y, bin_e, self.instrument)
+
+        binned_lightcurve = self.copy()
+        binned_lightcurve.t, binned_lightcurve.y, binned_lightcurve.e = bin_t, bin_y, bin_e
+        binned_lightcurve.cadence = bin_t[1] - bin_t[0]
 
         return binned_lightcurve
+
+    def clean(self):
+        # Mask out cadences where error < 0 (because this is an error)
+        y = np.where(self.e < 0, np.nan, self.y)
+
+        mask = np.isnan(y)
+
+        lc_clean = self.copy()
+        lc_clean.t, lc_clean.y, lc_clean.e = self.t[~mask], self.y[~mask], self.e[~mask]
+
+        return lc_clean
+
+    def unmask(self):
+        lc_unmasked = self.copy()
+        try:
+            lc_unmasked.t, lc_unmasked.y, lc_unmasked.e = self.t.data, self.y.data, self.e.data
+        except:
+            pass
+
+        return lc_unmasked
+
+    def normalise(self):
+        median = np.median(self.y)
+
+        lc_normalised = self.copy()
+        lc_normalised.y = self.y / median
+        lc_normalised.e = self.e / median
+
+        return lc_normalised
     
     def to_juliet(self):
         return ({self.instrument: self.t}, {self.instrument: self.y}, {self.instrument: self.e})
@@ -88,7 +130,7 @@ class TimeSeries:
     def ax_plot(self, ax, **kwargs):
         from .plotting import ax_lightcurve
 
-        return ax_lightcurve(ax, self.t, self.y, self.e, **kwargs)
+        ax_lightcurve(ax, self.t, self.y, self.e, **kwargs)
     
     def plot_fold(self, period, t0=None, **kwargs):
         from .plotting import plot_phasefold
@@ -98,7 +140,7 @@ class TimeSeries:
     def ax_fold(self, ax, period, t0=None, **kwargs):
         from .plotting import ax_phasefold
 
-        return ax_phasefold(ax, self.t, self.y, self.e, period, t0, **kwargs)
+        ax_phasefold(ax, self.t, self.y, self.e, period, t0, **kwargs)
 
 # ---------------------------------------------------------------------------- #
 # Lightcurve class                                                             #
@@ -120,10 +162,12 @@ class LightCurve(TimeSeries):
         return to_lightkurve(self, **kwargs)
     
     def flatten(self, window, function='wotan', **kwargs):
-        
+
         if isinstance(window, float) or isinstance(window, int):
             window = [window]
             single = True
+        else:
+            single = False
         
         # object to store lightcurves in if multiple window lengths ---------- #
         return_obj = DataCollection()
@@ -132,19 +176,42 @@ class LightCurve(TimeSeries):
             try:
                 import wotan
             except ImportError:
-                print('Wotan is not installed! Using [method] for now.')
+                print('Wotan is not installed! Using lightkurve for now.')
+                function = 'lightkurve'
             else:
                 wotan_kwargs = extract_kwargs(wotan.flatten, kwargs)
 
                 for wind in window:
                     y_flat = wotan.flatten(self.t, self.y, window_length=wind, **wotan_kwargs)
-                    return_obj.append(LightCurve(self.t, y_flat, self.e, self.instrument, self.cadence))
+
+                    return_lc = self.copy()
+                    return_lc.y = y_flat
+                    return_obj.append(return_lc)
+
+        if function == 'lightkurve':
+            try:
+                import lightkurve.lightcurve as lk
+            except ImportError:
+                print('Lightkurve is not installed! Using [method] for now.')
+            else:
+                #lightkurve_kwargs = extract_kwargs(wotan.flatten, kwargs)
+
+                lk_lc = lk.LightCurve(time=self.t, flux=self.y, flux_err=self.e)
+
+                for wind in window:
+                    wind = wind / (self.cadence / (3600 * 24))
+                    y_flat = lk_lc.flatten(window_length=wind, return_trend=False, **kwargs).flux
+
+                    return_lc = self.copy()
+                    return_lc.y = y_flat
+                    return_obj.append(return_lc)
+                del lk_lc
 
         if single:
             return return_obj[0]
         return return_obj
 
-    def clip(self, window, function='wotan', **kwargs):
+    def clip(self, window=1, function='wotan', low=10, high=3, threshold=[None, None], **kwargs):
                 
         if isinstance(window, float) or isinstance(window, int):
             window = [window]
@@ -153,17 +220,66 @@ class LightCurve(TimeSeries):
         # object to store lightcurves in if multiple window lengths ---------- #
         return_obj = DataCollection()
 
+        initial_length = len(self.t)
+
+        if not np.all(threshold == None):
+            higher, lower = asymmetric_deviation(self.y)
+            if threshold[0] is not None:
+                if lower > threshold[0]:
+                    low = threshold[0] / lower
+            if threshold[1] is not None:
+                if higher > threshold[1]:
+                    high = threshold[1] / higher
+
         if function == 'wotan':
             try:
                 import wotan
             except ImportError:
-                print('Wotan is not installed! Using [method] for now.')
+                print('Wotan is not installed! Using sigma_clip for now.')
+                function = 'sigma_clip'
             else:
                 wotan_kwargs = extract_kwargs(wotan.slide_clip, kwargs)
 
                 for wind in window:
-                    y_clip = wotan.slide_clip(self.t, self.y, window_length=wind, **wotan_kwargs)
-                    return_obj.append(LightCurve(self.t, y_clip, self.e, self.instrument, self.cadence))
+                    y_clip = wotan.slide_clip(self.t, self.y, window_length=wind, low=low, high=high, **wotan_kwargs)
+
+                    return_lc = self.copy()
+                    return_lc.y = y_clip
+                    return_lc = return_lc.clean()
+                    return_obj.append(return_lc)
+
+        if function == 'sigma_clip':
+            try:
+                from astropy.stats import sigma_clip
+            except ImportError:
+                print('Astropy is not installed! Using threshold for now.')
+                function = 'threshold'
+            else:
+                single = True
+                sigma_kwargs = extract_kwargs(sigma_clip, kwargs)
+
+                y_clip = sigma_clip(self.y, sigma_lower=low, sigma_upper=high, **sigma_kwargs)
+                mask = y_clip.mask
+
+                return_lc = self.copy()
+                return_lc.t, return_lc.y, return_lc.e = self.t[~mask], self.y[~mask], self.e[~mask]
+                return_obj.append(return_lc)
+
+        if function == 'threshold':
+            median = np.nanmedian(self.y)
+            mask = (self.y - median < high) & (median - self.y < low)
+            y_clip = np.where(mask, self.y, np.nan)
+
+            return_lc = self.copy()
+            return_lc.y = y_clip
+            return_lc = return_lc.clean()
+            return_obj.append(return_lc)
+
+        for lc in return_obj:
+            final_length = len(lc.t)
+            clip_frac = (initial_length - final_length) / initial_length
+            if clip_frac > 0.5:
+                warnings.warn(f'Warning: {(100*clip_frac):.1f}% ({initial_length - final_length}/{initial_length}) of cadences have been clipped.')
 
         if single:
             return return_obj[0]
@@ -256,8 +372,16 @@ class DataCollection:
     def order_data(self):
         if hasattr('sector'):
             pass
-            
 
+    def to_juliet(self):
+        time, flux, flux_err = {}, {}, {}
+        for lc in self.data:
+            time[lc.instrument] = lc.t
+            flux[lc.instrument] = lc.y
+            flux_err[lc.instrument] = lc.e
+
+        return time, flux, flux_err
+            
 # ---------------------------------------------------------------------------- #
 # Helper functions                                                             #
 # ---------------------------------------------------------------------------- #
@@ -277,6 +401,18 @@ def from_lightkurve(lc):
     y = lc.flux.value
     e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
     return LightCurve(t, y, e)
+
+
+def rms(y, mean=None):
+    if mean is None:
+        mean = np.mean(y)
+    return ((1/len(y)) * np.sum((mean - y)**2))**0.5
+
+
+def asymmetric_deviation(y):
+    mean = np.mean(y)
+    higher = np.where(y > mean, True, False)
+    return (rms(y[higher], mean), rms(y[~higher], mean))
 
 
 # TODO: this was written by Claude - rewrite properly. although it works nicely
@@ -540,6 +676,7 @@ def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
 
     return False  # Transit falls within a gap
 
+
 # TODO: refactor for generality
 def get_transits_in_data(time, period, t0, epoch=0):
     """
@@ -685,6 +822,9 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
     elif isinstance(extract_ffi, list):
         ffi_flux_types = extract_ffi
         extract_ffi = True
+    elif isinstance(extract_ffi, str):
+        ffi_flux_types = [extract_ffi]
+        extract_ffi = True
     else:
         ffi_flux_types = []
 
@@ -710,9 +850,13 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
         if not isinstance(cadences, dict):
             cadences = {m: {a: to_list(cadences) for a in authors[m]} for m in missions}
 
-        # Normalize selections
-        if not isinstance(selection, dict):
-            selection = {m: {a: {c: selection for c in cadences[m][a]} for a in authors[m]} for m in missions}
+    # Normalize selections
+    if not isinstance(selection, dict):
+        select = selection
+        selection = {m: {a: {c: selection for c in cadences[m][a]} for a in authors[m]} for m in missions}
+
+        if extract_ffi:
+            selection['TESS-FFI'] = select
 
     # ------------------------------------------------------------------------ #
     # Check if file exists and read it if not forcing download                 #
@@ -746,7 +890,7 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
             except ImportError:
                 print("Lightkurve is not installed! Skipping download")
             else:  
-
+                # Set up cache ----------------------------------------------- #
                 if cache_directory is not None:
                     lightkurve_cache = os.path.join(cache_directory, 'lightkurve')
                     if not os.path.exists(lightkurve_cache):
@@ -758,72 +902,72 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                         for cadence in cadences[mission][author]:
                             instrument = mission
                             select = selection[mission][author][cadence]
-                            if len(authors) != 1:
+                            if len(authors[mission]) != 1:
                                 instrument += ('-' + author)
-                            if len(cadences) != 1:
+                            if len(cadences[mission][author]) != 1:
                                 instrument += ('-' + cadence)
-
-                            data[instrument] = {}
-                            mask[instrument] = {}
 
                             # Search for lightcurve data --------------------- #
                             print(f"Downloading {cadence}-second lightcurve data by {author} from {mission} for {system_name}.")
                             search_result = lk.search_lightcurve(system_name, mission=mission, author=author, exptime=cadence)
-
                             print(search_result)
+
                             if len(search_result) == 0:
-                                raise Exception('No search results found.')
+                                print('No search results found.')
+                            else:
+                                data[instrument] = {}
+                                mask[instrument] = {}
 
-                            # Handle 'longest' and 'shortest' cadence args --- #
-                            if cadence == 'longest':
-                                cadence = max(search_result.exptime)
-                            elif cadence == 'shortest':
-                                cadence = min(search_result.exptime)
-                            search_result = search_result[search_result.exptime == cadence]
+                                # Handle 'longest' and 'shortest' cadences --- #
+                                if cadence == 'longest':
+                                    cadence = max(search_result.exptime)
+                                elif cadence == 'shortest':
+                                    cadence = min(search_result.exptime)
+                                search_result = search_result[search_result.exptime == cadence]
 
-                            # Download and stitch lightcurves ---------------- #
-                            lc_collection = search_result.download_all()
-                            if select != 'all':
-                                lc_collection = lc_collection[select]
-                            if isinstance(select, int):
-                                lc_collection = [lc_collection]
+                                # Download and stitch lightcurves ------------ #
+                                lc_collection = search_result.download_all()
+                                if select != 'all':
+                                    lc_collection = lc_collection[select]
+                                if isinstance(select, int):
+                                    lc_collection = [lc_collection]
 
-                            for lc in lc_collection:
-                                epoch = get_epoch(mission)
-                                lc.time = lc.time + epoch  # Adjust time to absolute BJD
+                                for lc in lc_collection:
+                                    epoch = get_epoch(mission)
+                                    lc.time = lc.time + epoch  # Adjust time to absolute BJD
 
-                                sector = getattr(lc, sector_keys[mission])
-                                lc = lc.remove_nans().normalize()
+                                    sector = getattr(lc, sector_keys[mission])
+                                    lc = lc.remove_nans().normalize()
 
-                                if np.any(lc.flux is None) or np.any(lc.flux_err is None):
-                                    print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
+                                    if np.any(lc.flux is None) or np.any(lc.flux_err is None):
+                                        print("Warning: Downloaded lightcurve data has None values in flux or flux_err.")
 
-                                # Mask transits ------------------------------ #
-                                if (system is not None) and mask_transits:
-                                    if len(system.planets) > 0:
-                                        lc = mask_lightcurve_transits(lc, system, tolerance=mask_tolerance)
+                                    # Mask transits -------------------------- #
+                                    if (system is not None) and mask_transits:
+                                        if len(system.planets) > 0:
+                                            lc = mask_lightcurve_transits(lc, system, tolerance=mask_tolerance)
 
-                                    # If the whole sector is masked out, move on
-                                    if len(lc.t) == 0:
-                                        continue
+                                        # If the whole sector is masked out, move on
+                                        if len(lc.t) == 0:
+                                            continue
 
-                                # Extract time and flux data ----------------- #
-                                t = lc.time.value  # in days
-                                y = lc.flux.value
-                                e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
+                                    # Extract time and flux data ------------- #
+                                    t = lc.time.value  # in days
+                                    y = lc.flux.value
+                                    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
 
-                                # Convert data to plain NumPy arrays --------- #
-                                t_data = np.array(t.data if hasattr(t, 'data') else t)
-                                t_mask = np.array(t.mask if hasattr(t, 'mask') else None)
-                                y_data = np.array(y.data if hasattr(y, 'data') else y)
-                                y_mask = np.array(y.mask if hasattr(y, 'mask') else None)
-                                e_data = np.array(e.data if hasattr(e, 'data') else e)
-                                e_mask = np.array(e.mask if hasattr(e, 'mask') else None)
+                                    # Convert data to plain NumPy arrays ----- #
+                                    t_data = np.array(t.data if hasattr(t, 'data') else t)
+                                    t_mask = np.array(t.mask if hasattr(t, 'mask') else None)
+                                    y_data = np.array(y.data if hasattr(y, 'data') else y)
+                                    y_mask = np.array(y.mask if hasattr(y, 'mask') else None)
+                                    e_data = np.array(e.data if hasattr(e, 'data') else e)
+                                    e_mask = np.array(e.mask if hasattr(e, 'mask') else None)
 
-                                # Store in dictionaries ---------------------- #
-                                data[instrument][sector] = {'t': t_data, 'y': y_data, 'e': e_data}
-                                mask[instrument][sector] = {'t': t_mask, 'y': y_mask, 'e': e_mask}
-                            expt[instrument] = cadence
+                                    # Store in dictionaries ------------------ #
+                                    data[instrument][sector] = {'t': t_data, 'y': y_data, 'e': e_data}
+                                    mask[instrument][sector] = {'t': t_mask, 'y': y_mask, 'e': e_mask}
+                                expt[instrument] = cadence
 
         # -------------------------------------------------------------------- #
         # Extract FFI lightcurves via eleanor                                  #
@@ -836,14 +980,24 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
             else:
                 print(f"Extracting FFI lightcurves for {system_name} via eleanor.")
 
+                if tic is None:
+                    try:
+                        if 'TIC' in system_name:
+                            tic = int(system_name.lstrip('TIC '))
+                        if 'TIC-' in system_name:
+                            tic = int(system_name.lstrip('TIC-'))
+                    except:
+                        pass
+
                 # Resolve the target and find available sectors -------------- #
                 try:
                     sectors_available = eleanor_observed_sectors(
-                        tic     =tic,
-                        coords  =coords,
-                        name    =system_name,
-                        sectors =selection
+                        sectors = selection['TESS-FFI'],
+                        tic     = tic,
+                        coords  = coords,
+                        name    = system_name,
                     )
+                    print(sectors_available)
                 except Exception as exc:
                     sectors_available = []
                     traceback.print_exc()
@@ -883,7 +1037,13 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                     sectors_downloaded = set(sectors_downloaded)
                     sectors_available = [sector for sector in sectors_available if sector not in sectors_downloaded]
 
+                    if (len(sectors_available) == 0) and (len(sectors_downloaded) > 0):
+                        print('All available sectors have already been downloaded from other sources!')
+
                 for flux_type in ffi_flux_types:
+                    if len(sectors_available) == 0:
+                        continue
+
                     instrument = f"TESS-FFI-{flux_type}"
                     data[instrument] = {}
                     mask[instrument] = {}
@@ -969,17 +1129,18 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
         # -------------------------------------------------------------------- #
         # Save to disk                                                         #
         # -------------------------------------------------------------------- #
-        if save_format == 'pickle':
-            import pickle
-            with open(lc_filename, 'wb') as f:
-                pickle.dump([data, mask, expt], f)
+        if len(data) > 0:
+            if save_format == 'pickle':
+                import pickle
+                with open(lc_filename, 'wb') as f:
+                    pickle.dump([data, mask, expt], f)
 
-        if save_format == 'json':
-            import json
-            with open(lc_filename, 'w', encoding='utf-8') as f:
-                json.dump([data, mask, expt], f, ensure_ascii=False, indent=4)
+            if save_format == 'json':
+                import json
+                with open(lc_filename, 'w', encoding='utf-8') as f:
+                    json.dump([data, mask, expt], f, ensure_ascii=False, indent=4)
 
-        print(f"All lightcurve data for {system_name} saved locally.")
+            print(f"All lightcurve data for {system_name} saved locally.")
 
     # ------------------------------------------------------------------------ #
     # Load data into LightCurve or DataCollection objects                      #
@@ -1011,6 +1172,7 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
         print("No lightcurves found?")
         return None
     return collections
+
 
 def eleanor_observed_sectors(sectors, tic=None, gaia=None, coords=None, name=None):
     '''Poached from eleanor - essentially just eleanor.multisectors but it returns the observed sectors instead. So no need for unnecessary downloads.'''

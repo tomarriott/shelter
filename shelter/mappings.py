@@ -1,3 +1,5 @@
+import astropy.units as u
+
 ################################################################################
 # - DICTIONARIES ------------------------------------------------------------- #
 ################################################################################
@@ -111,4 +113,45 @@ uncertainty_suffixes = {
 exoarchive_uncertainties = {
     "upper":                "err1",
     "lower":                "err2",
+}
+
+# Define units
+planet_units = {
+    "semiamplitude":        u.m/u.s,
+    "semimajor_axis":       u.AU,
+    "scaled_semimajor_axis":u.dimensionless_unscaled,
+    "period":               u.day,
+    "mass":                 u.M_earth,
+    "radius":               u.R_earth,
+    "scaled_radius":        u.dimensionless_unscaled,
+    "density":              u.kg/(u.m**3),
+    "eccentricity":         u.dimensionless_unscaled,
+    "inclination":          u.degree,
+    "insolation_flux":      u.W,
+    "time_of_midtransit":   u.day,
+    "temperature":          u.K,
+    "impact_parameter":     u.dimensionless_unscaled,
+    "depth":                u.percent,
+    "duration":             u.hour,
+    "arg_periastron":       u.degree,
+    "time_periastron":      u.day,
+    "star_temperature":     u.K,
+    "star_mass":            u.M_sun,
+    "star_radius":          u.R_sun,
+    "star_density":         u.kg/(u.m**3),
+    "ra":                   u.degree,
+    "dec":                  u.degree,
+    "distance":             u.parsec,
+}
+
+star_units = {
+    "temperature":          u.K,
+    "radius":               u.R_sun,
+    "mass":                 u.M_sun,
+    "density":              u.kg/(u.m**3),
+    "metallicity":          u.dimensionless_unscaled,
+    "luminosity":           u.L_sun,
+    "ra":                   u.degree,
+    "dec":                  u.degree,
+    "distance":             u.parsec,
 }
