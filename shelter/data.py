@@ -155,12 +155,15 @@ class LightCurve(TimeSeries):
         self.cadence = cadence
         self.sector = sector
 
+
     def __repr__(self):
         return f"LightCurve(N={self.N}, instrument={self.instrument}, t={self.t}, y={self.y}, e='{self.e})"
 
+
     def to_lightkurve(self, **kwargs):
         return to_lightkurve(self, **kwargs)
-    
+
+
     def flatten(self, window, function='wotan', **kwargs):
 
         if isinstance(window, float) or isinstance(window, int):
@@ -210,6 +213,7 @@ class LightCurve(TimeSeries):
         if single:
             return return_obj[0]
         return return_obj
+
 
     def clip(self, window=1, function='wotan', low=10, high=3, threshold=[None, None], **kwargs):
                 
@@ -284,9 +288,77 @@ class LightCurve(TimeSeries):
         if single:
             return return_obj[0]
         return return_obj
+
+
+    def trim(self, start=1, end=1, gap_threshold=0.5):
+
+        def trim_lc(lc, start=1, end=1):
+            lc_start = lc.t[1]
+            lc_end = lc.t[-1]
+            mask = (lc.t > lc_start + start) & (lc.t < lc_end - end)
+            y_trim = np.where(mask, lc.y, np.nan)
+
+            return_lc = lc.copy()
+            return_lc.y = y_trim
+            return_lc = return_lc.clean()
+
+            return return_lc
+
+        lcs = self.split_gaps(gap_threshold)
+        if type(lcs) is TimeSeries:
+            return trim_lc(lcs, start, end)
+
+        return_lcs = DataCollection()
+        for lc in lcs:
+            return_lcs.append(trim_lc(lc, start, end))
+
+        return return_lcs.stitch()
+
+
+    def split_gaps(self, gap_threshold=0.5):
+        diffs = np.diff(self.t)
+        gap_i = np.argwhere(diffs >= gap_threshold)
+        if len(gap_i) == 0:
+            print('No gaps found in data')
+            return self.copy()
+
+        gap_i = gap_i.T[0]
+
+        split_t = np.split(self.t, gap_i)
+        split_y = np.split(self.y, gap_i)
+        split_e = np.split(self.e, gap_i)
+
+        lcs = DataCollection()
+
+        for i in range(len(split_t)):
+            return_lc = self.copy()
+            return_lc.t = split_t[i]
+            return_lc.y = split_y[i]
+            return_lc.e = split_e[i]
+
+            return_lc.clean()
+
+            lcs.append(return_lc)
+
+        return lcs
+
     
-    def mask_transits(self, ):
-        return
+    def mask_transits(self, period, t0, window, epoch=0):
+        return_lc = self.copy()
+
+        transit_times = get_transits_in_data(self.t, period, t0, epoch)
+
+        for n in transit_times.keys():
+            T1 = transit_times[n] - (window/2)
+            T4 = transit_times[n] + (window/2)
+
+            transit_mask = np.where(np.logical_and(return_lc.t > T1, return_lc.t < T4), True, False)
+            print(transit_mask)
+
+            return_lc = return_lc[~transit_mask]
+
+        return return_lc
+
 
 # ---------------------------------------------------------------------------- #
 # Radial velocity class                                                        #

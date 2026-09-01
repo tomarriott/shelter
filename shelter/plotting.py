@@ -43,7 +43,7 @@ use_custom_styles()
 # - PLOTTING DATA ------------------------------------------------------------ #
 ################################################################################
 
-def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', **kwargs):
+def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', xlims=None, ylims=None, **kwargs):
     fig = plt.figure(figsize=figsize)
     ax = fig.subplots()
 
@@ -53,6 +53,11 @@ def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', **kwargs):
 
     if not save:
         plt.show()
+
+    if xlims is not None:
+        ax.set_xlim(*xlims)
+    if ylims is not None:
+        ax.set_ylim(*ylims)
 
     if save:
         savefig_args = extract_kwargs(plt.savefig, kwargs)
@@ -120,17 +125,24 @@ def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2=
 # ---------------------------------------------------------------------------- #
 
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
-                  data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
-                  bin_data_args={},
-                  bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
+                  data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                   **kwargs):
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def = {}
+    bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+    
     if ax is None:
         ax = plt.axes()
 
     if yerr is None:
         yerr = np.zeros(np.shape(y))
     
-    ax.errorbar(t, y, yerr=yerr, **data_errorbar_args)
+    ax.errorbar(t, y, yerr=yerr, **data_errorbar_def)
 
     if isinstance(transit_times, dict):
         transit_times = transit_times.values()
@@ -141,9 +153,9 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
         ax.axvline(transit, c='#40a1a1', alpha=0.5, zorder=4, linestyle='--')
 
     if plot_bin:
-        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
+        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_def)
 
-        ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_args)
+        ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_def)
 
     ax.set_xlabel('Time (BJD)')
     ax.set_ylabel('Flux')
@@ -152,11 +164,7 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
                    break_gap=None, break_factor=10, break_wspace=0.06,
                    break_mark_size=0.4, min_seg_width_frac=0.06,
-                   data_errorbar_args={'ms': 1, 'ls': 'none', 'c': '#f04f4f', 'fmt': 'o',
-                                        'mfc': '#f04f4f', 'mec': '#4f2020', 'alpha': 0.5, 'zorder': 2},
-                   bin_data_args={},
-                   bin_errorbar_args={'ms': 4, 'capsize': 2, 'elinewidth': 1, 'fmt': 'o',
-                                       'mfc': 'w', 'mec': 'k', 'ecolor': 'k', 'zorder': 20},
+                   data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                    **kwargs):
     """
     Plot a lightcurve, automatically breaking the x-axis across large gaps in `t`
@@ -187,6 +195,15 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
         The axes used for plotting, left to right. If no gap was found this
         is a single-element list containing the original `ax`.
     """
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def = {}
+    bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+
     t = np.asarray(t, dtype=float)
     y = np.asarray(y, dtype=float)
     yerr = np.zeros_like(t) if yerr is None else np.asarray(yerr, dtype=float)
@@ -200,7 +217,7 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     transit_times = np.array(list(transit_times))
 
     if plot_bin:
-        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_args)
+        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_def)
         t_bin = np.asarray(t_bin)
         bin_order = np.argsort(t_bin)
         t_bin, y_bin, yerr_bin = t_bin[bin_order], np.asarray(y_bin)[bin_order], np.asarray(yerr_bin)[bin_order]
@@ -220,7 +237,7 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     n_seg = len(t_segs)
 
     def _plot_data(a, tt, yy, ye):
-        a.errorbar(tt, yy, yerr=ye, **data_errorbar_args)
+        a.errorbar(tt, yy, yerr=ye, **data_errorbar_def)
         for transit in transit_times:
             a.axvline(transit, c='#40a1a1', alpha=0.5, zorder=4, linestyle='--')
 
@@ -230,7 +247,7 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
             ax = plt.axes()
         _plot_data(ax, t_segs[0], y_segs[0], yerr_segs[0])
         if plot_bin:
-            ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_args)
+            ax.errorbar(t_bin, y_bin, yerr_bin, **bin_errorbar_def)
         ax.set_xlabel('Time (BJD)')
         ax.set_ylabel('Flux')
         return [ax]
@@ -307,13 +324,20 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
                     figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
-                    data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
-                    bin_data_args={},
-                    bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
+                    data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                     **kwargs):
+    
+    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def = {}
+    bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+    
     plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin,
               figsize=figsize, save=save, save_path=save_path,
-              data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+              data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
 
 
 def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
@@ -351,12 +375,19 @@ def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
 # ---------------------------------------------------------------------------- #
 
 def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                 data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
-                 bin_data_args={'n_points': 200},
-                 bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
+                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                  **kwargs):
+
+    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def={'n_points': 200}
+    bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+    
     ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin,
-                  data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+                  data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
 
     ax.set_xlabel('Phase')
 
@@ -369,29 +400,43 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
 
 
 def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                   data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
-                   bin_data_args={'n_points': 200},
-                   bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
-                   **kwargs):
-    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, data_errorbar_args, bin_data_args, bin_errorbar_args, **kwargs)
+                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                 **kwargs):
+
+    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def={'n_points': 200}
+    bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+
+    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, data_errorbar_def, bin_data_def, bin_errorbar_def, **kwargs)
 
 
 def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
-               data_errorbar_args={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,},
-               bin_data_args={'n_points': 200},
-               bin_errorbar_args={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20},
-               **kwargs):
+                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                 **kwargs):
+
+    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    bin_data_def={'n_points': 200}
+    bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
+
+    data_errorbar_def.update(data_errorbar_args)
+    bin_data_def.update(bin_data_args)
+    bin_errorbar_def.update(bin_errorbar_args)
+
     axes = split_axis(ax, nrows=1, ncols=2, share='none', hspace=0, wspace=0)
 
     ax_lightcurve(axes[0], *fold_data(t, y, period=2*period, t0=t0, e=yerr), plot_bin=plot_bin,
-                  data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+                  data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
     
     axes[0].set_xlabel('Phase')
     axes[0].set_ylabel('Flux')
     axes[0].yaxis.set_ticks_position('left')
     
     ax_lightcurve(axes[1], *fold_data(t, y, period=2*period, t0=(t0+period), e=yerr), plot_bin=plot_bin,
-                  data_errorbar_args=data_errorbar_args, bin_data_args=bin_data_args, bin_errorbar_args=bin_errorbar_args, **kwargs)
+                  data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
     
     axes[1].set_xlabel('Phase')
     axes[1].set_ylabel('')
