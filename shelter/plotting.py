@@ -125,10 +125,16 @@ def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2=
 # ---------------------------------------------------------------------------- #
 
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
+                  colour='#f04f4f', transit_line_colour='#40a1a1',
                   data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                   **kwargs):
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    errorbar_colour = Colour(colour, 'Hex', alpha=1)
+    errorbar_hsv = errorbar_colour.get_colour('HSV')
+    marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
+    marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -150,7 +156,8 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
         transit_times = np.array(transit_times)
 
     for transit in transit_times:
-        ax.axvline(transit, c='#40a1a1', alpha=0.5, zorder=4, linestyle='--')
+        ax.axvline(transit, c=transit_line_colour, alpha=0.5, zorder=4, linestyle='--',
+                   path_effects=[Stroke(linewidth=3, foreground='w', alpha=0.5), Normal()])
 
     if plot_bin:
         t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_def)
@@ -375,11 +382,11 @@ def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
 # ---------------------------------------------------------------------------- #
 
 def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                 data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                  **kwargs):
 
     data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
-    bin_data_def={'n_points': 200}
+    bin_data_def={}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
     data_errorbar_def.update(data_errorbar_args)

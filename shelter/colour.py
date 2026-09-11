@@ -148,6 +148,27 @@ def sRGB_to_Hex(rgb):
         return hexes
     return '#' + ''.join('%02X' % round(i*255) for i in rgb)
 
+def Hex_to_sRGB(Hex):
+    """
+    Convert a set of Hex codes to sRGB colour values.
+    Codes must be defined like '#rrggbb'.
+    If inputting arrays of values, the input arrays must be of the same length.
+
+    Parameters:
+        Hex (string or list of strings): Hex code
+
+    Returns:
+        Hex (array-like): sRGB value
+    """
+    rgb = []
+    for code in Hex:
+        code  = code.lstrip('#')
+        if len(Hex) > 1:
+            rgb.append([int(code[i:i+2], 16) / 255 for i in (0, 2, 4)])
+        else:
+            rgb = [int(code[i:i+2], 16) / 255 for i in (0, 2, 4)]
+    return np.asarray(rgb)
+
 def Oklab_to_Oklch(Lab):
     """
     Convert a set of Oklab colour values to Oklch.
@@ -308,6 +329,7 @@ _to_XYZ_methods = {
     "sRGB": lambda v: sRGB_to_XYZ(v),
     "RGB": lambda v: RGB_to_XYZ(v),
     "HSV": lambda v: HSV_to_XYZ(v),
+    'Hex': lambda v: sRGB_to_XYZ(Hex_to_sRGB(v)),
     "XYZ": lambda v: np.array(v),
     "Oklab": lambda v: Oklab_to_XYZ(v), 
     "Oklch": lambda v: Oklab_to_XYZ(Oklch_to_Oklab(v)),
@@ -348,6 +370,8 @@ class Colour:
             space (string): One of "sRGB", "RGB", "HSV", etc.
             alpha (float): Value for the alpha (opacity) channel. Defaults to 1.
         """
+        if space == 'Hex':
+            value = [value]
         value = np.asarray(value)
 
         if space not in _to_XYZ_methods:
@@ -478,6 +502,8 @@ class Gradient:
         If the gradient is empty, picked colours will be solid black.
         Returns values in the interpolation space.
         """
+        t = t % 1
+
         if self._nstops <= 1:
             if self._nstops == 0:
                 return np.zeros(4, t)
@@ -485,6 +511,7 @@ class Gradient:
                 return np.ones(4, t) * self._stop_values[0]
 
         i = self.positions.searchsorted(t)
+
         # Note: this will break if there is no stop above or below t
         # TODO: add checks for if this occurs
         frac = (t - self.positions[i-1]) / (self.positions[i] - self.positions[i-1])

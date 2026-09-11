@@ -332,9 +332,9 @@ class LightCurve(TimeSeries):
 
         for i in range(len(split_t)):
             return_lc = self.copy()
-            return_lc.t = split_t[i]
-            return_lc.y = split_y[i]
-            return_lc.e = split_e[i]
+            return_lc.t = split_t[i][1:]
+            return_lc.y = split_y[i][1:]
+            return_lc.e = split_e[i][1:]
 
             return_lc.clean()
 
@@ -353,7 +353,6 @@ class LightCurve(TimeSeries):
             T4 = transit_times[n] + (window/2)
 
             transit_mask = np.where(np.logical_and(return_lc.t > T1, return_lc.t < T4), True, False)
-            print(transit_mask)
 
             return_lc = return_lc[~transit_mask]
 
@@ -439,7 +438,12 @@ class DataCollection:
         t = np.hstack([datum.t for datum in self.data])
         y = np.hstack([datum.y for datum in self.data])
         e = np.hstack([datum.e for datum in self.data])
-        return type(self.data[0])(*order_data(t, y, e), self.data[0].instrument)
+        
+        return_lc = type(self.data[0])(*order_data(t, y, e), self.data[0].instrument)
+        if type(return_lc) is LightCurve:
+            return_lc.sector = [datum.sector for datum in self.data]
+
+        return return_lc
     
     def order_data(self):
         if hasattr('sector'):
@@ -453,6 +457,11 @@ class DataCollection:
             flux_err[lc.instrument] = lc.e
 
         return time, flux, flux_err
+
+    def plot(self):
+        from .colour import Colour, Gradient
+
+
             
 # ---------------------------------------------------------------------------- #
 # Helper functions                                                             #
@@ -750,7 +759,7 @@ def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
 
 
 # TODO: refactor for generality
-def get_transits_in_data(time, period, t0, epoch=0):
+def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
     """
     Get transit times for a planet that fall within the lightcurve data range, accounting for gaps.
     The transit numbers are adjusted to start from 0.
@@ -782,8 +791,13 @@ def get_transits_in_data(time, period, t0, epoch=0):
     # Adjust transit numbers to start from 0
     if valid_transits:
         min_transit_number = min(valid_transits.keys())
-        valid_transits = {n - min_transit_number: t for n, t in valid_transits.items()}
+    else:
+        min_transit_number = int(transit_numbers[0]) if len(transit_numbers) else 0
+    valid_transits = {n - min_transit_number: t for n, t in valid_transits.items()}
 
+    if return_all:
+        all_transits = {int(n) - min_transit_number: t for n, t in zip(transit_numbers[1:], transit_times[1:])}
+        return valid_transits, all_transits
     return valid_transits
 
 
