@@ -127,7 +127,7 @@ def merge_tables(id, input_data, filepath=None):
         })
 
     if mission == 'TESS':
-        file = '/Users/trm143@student.bham.ac.uk/Documents/Code/shelter/shelter/data_dump/TOI list.csv'
+        file = './shelter/data_dump/TOI list.csv'
         file_df = pd.read_csv(file, skiprows=69)
         file_df = file_df[file_df['tfopwg_disp'] != ('FP' or 'FA')]
         file_df = file_df[np.round(file_df.toi.to_numpy(), 0) == int(id.lstrip('TOI-'))].reset_index()
