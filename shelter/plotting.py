@@ -331,10 +331,16 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
                     figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
+                    colour='#f04f4f',
                     data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
                     **kwargs):
     
-    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    errorbar_colour = Colour(colour, 'Hex', alpha=1)
+    errorbar_hsv = errorbar_colour.get_colour('HSV')
+    marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
+    marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -343,7 +349,7 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
     bin_errorbar_def.update(bin_errorbar_args)
     
     plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin,
-              figsize=figsize, save=save, save_path=save_path,
+              figsize=figsize, save=save, save_path=save_path, colour=colour,
               data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
 
 
@@ -382,18 +388,24 @@ def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
 # ---------------------------------------------------------------------------- #
 
 def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
+                 colour='#f04f4f',
                  data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                  **kwargs):
 
-    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
-    bin_data_def={}
+    errorbar_colour = Colour(colour, 'Hex', alpha=1)
+    errorbar_hsv = errorbar_colour.get_colour('HSV')
+    marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
+    marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    bin_data_def = {}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
     data_errorbar_def.update(data_errorbar_args)
     bin_data_def.update(bin_data_args)
     bin_errorbar_def.update(bin_errorbar_args)
     
-    ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin,
+    ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin, colour=colour,
                   data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
 
     ax.set_xlabel('Phase')
@@ -407,26 +419,32 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
 
 
 def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
-                 **kwargs):
+                   colour='#f04f4f',
+                   data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
+                   **kwargs):
 
-    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
-    bin_data_def={'n_points': 200}
+    errorbar_colour = Colour(colour, 'Hex', alpha=1)
+    errorbar_hsv = errorbar_colour.get_colour('HSV')
+    marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
+    marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
+
+    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    bin_data_def = {}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
     data_errorbar_def.update(data_errorbar_args)
     bin_data_def.update(bin_data_args)
     bin_errorbar_def.update(bin_errorbar_args)
 
-    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, data_errorbar_def, bin_data_def, bin_errorbar_def, **kwargs)
+    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, colour, data_errorbar_def, bin_data_def, bin_errorbar_def, **kwargs)
 
 
 def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
-                 data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                 data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                  **kwargs):
 
     data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
-    bin_data_def={'n_points': 200}
+    bin_data_def={}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
     data_errorbar_def.update(data_errorbar_args)
@@ -469,7 +487,6 @@ def ax_transits(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=
     colour3 = Colour((244/255, 211/255, 94/255), 'sRGB')
     colour4 = Colour((172/255, 148/255, 247/255), 'sRGB')
     gradient1 = Gradient([colour2, colour3, colour1, colour4], [0, .3, .7, 1], interp_space='Oklab')
-    print(gradient1)
 
     colour5 = Colour((122/255, 231/255, 199/255), 'sRGB')
     colour6 = Colour((224/255, 119/255, 125/255), 'sRGB')

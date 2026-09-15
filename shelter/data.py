@@ -802,7 +802,7 @@ def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
 
 
 def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=None,
-                   missions=[], authors=[], cadences='longest', selection='all',
+                   missions=['TESS'], authors=['SPOC'], cadences='longest', selection='all',
                    extract_ffi=False, fill_gaps=False, tic=None, coords=None,
                    overwrite=False, save_format='pickle', system=None, mask_transits=False, mask_tolerance=4):
     """
