@@ -1,5 +1,7 @@
 .venv
 .vscode
 **/__pycache__
-shelter/data_dump
+shelter/data_dump/*
 shelter.egg-info
+!**/KOI List.csv
+!shelter/data_dump/TOI List.csv
