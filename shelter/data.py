@@ -305,7 +305,7 @@ class LightCurve(TimeSeries):
             return return_lc
 
         lcs = self.split_gaps(gap_threshold)
-        if type(lcs) is TimeSeries:
+        if type(lcs) is LightCurve:
             return trim_lc(lcs, start, end)
 
         return_lcs = DataCollection()
@@ -702,10 +702,10 @@ def fold_data(t, y, e=None, period=None, t0=None, centre=0, scale=1):
     if period is None:
         raise Exception
     if t0 is None:
-        fold_t = (t % period) / period
+        fold_t = (((t % period) / period) + centre - 0.5) * scale
     else:
-        fold_t = (((t - t0 + (period/2)) % period) / period) + centre
-    return order_data(fold_t - 0.5, y, e)
+        fold_t = ((((t - t0 + (period/2)) % period) / period) + centre - 0.5) * scale
+    return order_data(fold_t, y, e)
 
 
 def fold_data_alternate(t, y, e=None, period=None, t0=None):
