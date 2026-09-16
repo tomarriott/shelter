@@ -71,8 +71,8 @@ class TimeSeries:
     def order_data(self):
         self.t, self.y, self.e = order_data(self.t, self.y, self.e)
 
-    def fold(self, period, t0=None):
-        fold_t, fold_y, fold_e = fold_data(self.t, self.y, self.e, period, t0)
+    def fold(self, period, t0=None, centre=0, scale=1):
+        fold_t, fold_y, fold_e = fold_data(self.t, self.y, self.e, period, t0, centre, scale)
 
         folded_lightcurve = self.copy()
         folded_lightcurve.t, folded_lightcurve.y, folded_lightcurve.e = fold_t, fold_y, fold_e
@@ -356,7 +356,6 @@ class LightCurve(TimeSeries):
             mask = np.where(np.logical_and(return_lc.t > T1, return_lc.t < T4), False, True)
 
             transit_mask = np.logical_and(transit_mask, mask)
-            print(transit_mask)
 
         if only_transits:
             return return_lc[~transit_mask]
@@ -699,13 +698,13 @@ def order_data(t, y, e=None):
     return t[idx], y[idx], e[idx]
 
 
-def fold_data(t, y, e=None, period=None, t0=None):
+def fold_data(t, y, e=None, period=None, t0=None, centre=0, scale=1):
     if period is None:
         raise Exception
     if t0 is None:
         fold_t = (t % period) / period
     else:
-        fold_t = ((t - t0 + (period/2)) % period) / period
+        fold_t = (((t - t0 + (period/2)) % period) / period) + centre
     return order_data(fold_t - 0.5, y, e)
 
 
@@ -718,6 +717,7 @@ def fold_data_alternate(t, y, e=None, period=None, t0=None):
     else:
         fold_t = (t - t0) / period - np.floor((t - t0) / period)
     return order_data(fold_t, y, e)
+
 
 # TODO: refactor for generality
 def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
