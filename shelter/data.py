@@ -347,23 +347,19 @@ class LightCurve(TimeSeries):
         return_lc = self.copy()
 
         transit_times = get_transits_in_data(self.t, period, t0, epoch)
-        
-        if not only_transits:
-            transit_mask = np.ones(len(self.t)) * True
-        else:
-            transit_mask = np.ones(len(self.t)) * False
+        transit_mask = np.ones(len(self.t)) * True
 
         for n in transit_times.keys():
             T1 = transit_times[n] - (window/2)
             T4 = transit_times[n] + (window/2)
 
-            mask = np.where(np.logical_and(return_lc.t > T1, return_lc.t < T4), True, False)
+            mask = np.where(np.logical_and(return_lc.t > T1, return_lc.t < T4), False, True)
 
-            if not only_transits:
-                transit_mask = np.logical_and(transit_mask, mask)
-            else:
-                transit_mask = np.logical_or(transit_mask, mask)
+            transit_mask = np.logical_and(transit_mask, mask)
+            print(transit_mask)
 
+        if only_transits:
+            return return_lc[~transit_mask]
         return return_lc[transit_mask]
 
 
