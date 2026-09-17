@@ -330,9 +330,9 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
-                    figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
-                    colour='#f04f4f',
+                    colour='#f04f4f', transit_line_colour='#40a1a1',
                     data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                    figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
                     **kwargs):
     
     errorbar_colour = Colour(colour, 'Hex', alpha=1)
@@ -348,9 +348,9 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
     bin_data_def.update(bin_data_args)
     bin_errorbar_def.update(bin_errorbar_args)
     
-    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin,
-              figsize=figsize, save=save, save_path=save_path, colour=colour,
-              data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
+    plot_axes(ax_lightcurve, t, y, yerr, transit_times, plot_bin, colour, transit_line_colour,
+              data_errorbar_def, bin_data_def, bin_errorbar_def, 
+              figsize=figsize, save=save, save_path=save_path, **kwargs)
 
 
 def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):

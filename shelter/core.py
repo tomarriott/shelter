@@ -676,14 +676,22 @@ class System(ParameterContainer):
             except ValueError:
                 print('Object not in system!')
 
-    def create_custom_star(self, data, uncertainty_dict=None):
+    def create_custom_star(self, data, uncertainty_dict=None, duplicate='keep'):
         '''to be deprecated'''
         star = Star(data.get("name", "Unnamed Star"))
         for key, value in data.items():
             star.set_param(key, value)
 
         if star.name in [s.name for s in self.stars]:
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a star named {star.name} already exists in this system! Chamging name to {star.name + "_copy"}')
+                star.name = star.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a star named {star.name} already exists in this system! Overwriting')
+                self.delete_object(star.name)
+            else:
+                print(f'Warning: a planet named {star.name} already exists in this system! Returning None')
+                return None
 
         self.add_star(star)
         return star
@@ -692,20 +700,27 @@ class System(ParameterContainer):
         # maybe merge this with create_data calls too - have it go through retrieve_params, and only rely on dictionaries (or just make it agnostic to dicts or tables)
         # needs to be able to handle uncertainty dicts with both prefixes and suffixes
 
-    def create_custom_planet(self, data, uncertainty_dict=None):
+    def create_custom_planet(self, data, uncertainty_dict=None, duplicate='keep'):
         '''to be deprecated'''
         planet = Planet(data.get("name", "Unnamed Planet"))
         for key, value in data.items():
             planet.set_param(key, value)
 
         if planet.name in [p.name for p in self.planets]:
-            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Chamging name to {planet.name + "_copy"}')
+                planet.name = planet.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Overwriting')
+                self.delete_object(planet.name)
+            else:
+                print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+                return None
 
         self.add_planet(planet)
         return planet
 
-    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None,
+    def create_data_star(self, id=None, data=None, index=None, default=True, filepath=None, duplicate='keep',
                          params_dict=exoarchive_star_params, names_dict=exoarchive_star_names, uncertainty_dict=exoarchive_uncertainties):
         '''to be deprecated'''
         star = Star()
@@ -715,13 +730,20 @@ class System(ParameterContainer):
         star.retrieve_names(data, names_dict, 0)
 
         if star.name in [s.name for s in self.stars]:
-            print(f'Warning: a star named {star.name} already exists in this system! Returning None')
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a star named {star.name} already exists in this system! Chamging name to {star.name + "_copy"}')
+                star.name = star.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a star named {star.name} already exists in this system! Overwriting')
+                self.delete_object(star.name)
+            else:
+                print(f'Warning: a planet named {star.name} already exists in this system! Returning None')
+                return None
 
         self.add_star(star)
         return star
 
-    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None,
+    def create_data_planet(self, id=None, data=None, index=None, default=True, filepath=None, duplicate='keep',
                            params_dict=exoarchive_planet_params, names_dict=exoarchive_planet_names, uncertainty_dict=exoarchive_uncertainties):
         '''to be deprecated'''
         planet = Planet()
@@ -731,13 +753,20 @@ class System(ParameterContainer):
         planet.retrieve_names(data, names_dict, 0)
 
         if planet.name in [p.name for p in self.planets]:
-            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Chamging name to {planet.name + "_copy"}')
+                planet.name = planet.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Overwriting')
+                self.delete_object(planet.name)
+            else:
+                print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+                return None
 
         self.add_planet(planet)
         return planet
     
-    def create_star(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix',
+    def create_star(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix', duplicate='keep',
                     param_dict=exoarchive_star_params, name_dict=exoarchive_star_names, uncertainty_dict=exoarchive_uncertainties):
         star = Star()
         if data is None:
@@ -746,13 +775,20 @@ class System(ParameterContainer):
         star.retrieve_names(data, name_dict, 0)
 
         if star.name in [s.name for s in self.stars]:
-            print(f'Warning: a star named {star.name} already exists in this system! Returning None')
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a star named {star.name} already exists in this system! Chamging name to {star.name + "_copy"}')
+                star.name = star.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a star named {star.name} already exists in this system! Overwriting')
+                self.delete_object(star.name)
+            else:
+                print(f'Warning: a planet named {star.name} already exists in this system! Returning None')
+                return None
 
         self.add_star(star)
         return star
 
-    def create_planet(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix',
+    def create_planet(self, id=None, data=None, index=None, default=True, filepath=None, uncertainty='suffix', duplicate='keep',
                       param_dict=exoarchive_planet_params, name_dict=exoarchive_planet_names, uncertainty_dict=exoarchive_uncertainties):
         planet = Planet()
         if data is None:
@@ -761,8 +797,15 @@ class System(ParameterContainer):
         planet.retrieve_names(data, name_dict, 0)
 
         if planet.name in [p.name for p in self.planets]:
-            print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
-            return None
+            if duplicate == 'keep':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Chamging name to {planet.name + "_copy"}')
+                planet.name = planet.name + "_copy"
+            elif duplicate == 'overwrite':
+                print(f'Warning: a planet named {planet.name} already exists in this system! Overwriting')
+                self.delete_object(planet.name)
+            else:
+                print(f'Warning: a planet named {planet.name} already exists in this system! Returning None')
+                return None
 
         self.add_planet(planet)
         return planet

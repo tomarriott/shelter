@@ -104,7 +104,6 @@ star_aliases = {
     "metallicity_ratio":    ["metratio"],
 }
 
-# Define uncertainty suffix aliases
 uncertainty_suffixes = {
     "_upper":               ["_u", "err1"],
     "_lower":               ["_l", "err2"],
@@ -154,4 +153,16 @@ star_units = {
     "ra":                   u.degree,
     "dec":                  u.degree,
     "distance":             u.parsec,
+}
+
+batman_params = {
+    "time_of_midtransit":   "t0",
+    "period":               "per",
+    "scald_radius":         "rp",
+    "scaled_semimajor_axis":"a",
+    "inclination":          "inc",
+    "eccentricity":         "ecc",
+    "arg_periastron":       "w",
+    "u":                    "u",
+    "limb_dark":            "limb_dark",
 }

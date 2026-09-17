@@ -26,7 +26,7 @@ class TimeSeries:
                 e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=np.std(y)).reshape(len(y))
         else:
             e = np.ones(len(y)) * e
-        self.e = e
+        self.e = np.asanyarray(e)
 
         self.N = len(t)
         self.instrument = instrument
@@ -82,7 +82,8 @@ class TimeSeries:
         return folded_lightcurve
     
     def bin(self, n_points=None, n_bins=None, t_bins=None, method='mean'):
-        bin_t, bin_y, bin_e = bin_data(*self.order_data(), n_points, n_bins, t_bins, method)
+        self.order_data()
+        bin_t, bin_y, bin_e = bin_data(self.t, self.y, self.e, n_points, n_bins, t_bins, method)
 
         binned_lightcurve = self.copy()
         binned_lightcurve.t, binned_lightcurve.y, binned_lightcurve.e = bin_t, bin_y, bin_e
@@ -360,6 +361,33 @@ class LightCurve(TimeSeries):
         if only_transits:
             return return_lc[~transit_mask]
         return return_lc[transit_mask]
+
+
+    def simulate_transits(self, planet=None, params={}):
+        try:
+            import batman
+            from .mappings import batman_params
+        except ImportError:
+            print('Batman is not installed!')
+            return self
+        else:
+            return_lc = self.copy()
+            transit_params = batman.TransitParams()
+
+            if planet is not None:
+                for key in batman_params.keys():
+                    setattr(transit_params, batman_params[key], getattr(planet, key))
+            elif len(params) > 0:
+                for key in params.keys():
+                    setattr(transit_params, params[key])
+            else:
+                print('Either a Planet object or a dict of parameters must be provided')
+                return self
+
+            sim_flux = batman.TransitModel(params, return_lc.t).light_curve(transit_params)                    # calculates light curve
+            return_lc.y = return_lc.y * sim_flux 
+
+            return return_lc
 
 
 # ---------------------------------------------------------------------------- #
