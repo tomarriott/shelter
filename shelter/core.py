@@ -15,6 +15,7 @@ from pathlib import Path
 #import importlib.resources as impresources
 
 from .io import *
+from . import query
 from .mappings import *
 from .search import active_searches
 
@@ -485,6 +486,15 @@ class Parameter:
     def __repr__(self):
         return f"Parameter(value={self.value}, +{self.upper}, -{self.lower})"
 
+    def to_dict(self):
+        '''Return a simple dict representation for printing/serialization.'''
+        return {
+            'value': self.value,
+            'upper': self.upper,
+            'lower': self.lower,
+            'aliases': self.aliases,
+        }
+
 class ParameterContainer:
     '''
     A class to manage parameters, with support for aliases (and uncertainty suffixes???).
@@ -628,7 +638,145 @@ class ParameterContainer:
                 continue
 
     def __repr__(self):
-        return f"ParameterContainer({self._parameters})"
+        # Include parameters stored via `set_param` and any public attributes
+        parts = []
+
+        def format_value(val):
+            # Nicely format Parameter and Distribution objects
+            if isinstance(val, Parameter):
+                return f"Parameter(value={val.value!r}, +{val.upper!r}, -{val.lower!r})"
+            if isinstance(val, Distribution):
+                low, med, high = val.credible_interval()
+                return f"Distribution(median={med!r}, 16th={low!r}, 84th={high!r})"
+
+            # If object has a `name` attribute, show short form
+            if hasattr(val, 'name'):
+                try:
+                    return f"{val.__class__.__name__}('{val.name}')"
+                except Exception:
+                    return f"{val.__class__.__name__}(<name>)"
+
+            # For lists/tuples of objects, show their short names if available
+            if isinstance(val, (list, tuple)):
+                items = []
+                for it in val:
+                    if hasattr(it, 'name'):
+                        items.append(str(it.name))
+                    else:
+                        items.append(repr(it))
+                return '[' + ', '.join(items) + ']'
+
+            return repr(val)
+
+        # Parameters set via set_param
+        if self._parameters:
+            params_repr = ', '.join(f"{k}: {format_value(v)}" for k, v in self._parameters.items())
+            parts.append(f"parameters={{ {params_repr} }}")
+
+        # Public attributes set directly on the instance (not private/internal)
+        public_attrs = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        # Exclude any attributes that are also represented in _parameters
+        public_attrs = {k: v for k, v in public_attrs.items() if k not in self._parameters}
+        if public_attrs:
+            attrs_repr = ', '.join(f"{k}={format_value(v)}" for k, v in public_attrs.items())
+            parts.append(f"attributes={{ {attrs_repr} }}")
+
+        if parts:
+            return f"{self.__class__.__name__}({'; '.join(parts)})"
+
+        return f"{self.__class__.__name__}()"
+
+    def pretty_print(self, as_astropy=False, display=False):
+        """Return pandas DataFrame(s) or astropy Table(s) representing the container.
+
+        Parameters
+        - as_astropy: if True, return astropy Table objects instead of pandas DataFrames.
+        - display: if True, attempt to display the tables in Jupyter (uses IPython.display).
+
+        Returns (params_table, attrs_table) where each is a pandas.DataFrame or astropy.table.Table.
+        """
+        # Build parameters DataFrame
+        params_rows = []
+        for k, v in self._parameters.items():
+            if isinstance(v, Parameter):
+                params_rows.append({
+                    'parameter': k,
+                    'value': v.value,
+                    'lower': v.lower,
+                    'upper': v.upper,
+                })
+            else:
+                params_rows.append({
+                    'parameter': k,
+                    'value': repr(v),
+                    'lower': None,
+                    'upper': None,
+                })
+
+        df_params = pd.DataFrame(params_rows, columns=['parameter', 'value', 'lower', 'upper'])
+
+        # Build attributes DataFrame
+        attrs_rows = []
+        public_attrs = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        public_attrs = {k: v for k, v in public_attrs.items() if k not in self._parameters}
+        for k, v in public_attrs.items():
+            if isinstance(v, Parameter):
+                val = v.value
+                info = f"+{v.upper}/-{v.lower}"
+            elif isinstance(v, Distribution):
+                low, med, high = v.credible_interval()
+                val = med
+                info = f"16th={low},84th={high}"
+            elif hasattr(v, 'name'):
+                if isinstance(v, (list, tuple)):
+                    names = [getattr(it, 'name', repr(it)) for it in v]
+                    val = ', '.join(names)
+                else:
+                    val = getattr(v, 'name', repr(v))
+                info = ''
+            elif isinstance(v, (list, tuple)):
+                val = ', '.join(repr(x) for x in v)
+                info = ''
+            else:
+                val = v
+                info = ''
+
+            attrs_rows.append({'attribute': k, 'value': val, 'info': info})
+
+        df_attrs = pd.DataFrame(attrs_rows, columns=['attribute', 'value', 'info'])
+
+        if as_astropy:
+            try:
+                tab_params = Table.from_pandas(df_params)
+                tab_attrs = Table.from_pandas(df_attrs)
+            except Exception:
+                # Fallback if astropy Table conversion fails
+                tab_params = df_params
+                tab_attrs = df_attrs
+
+            if display:
+                try:
+                    from IPython.display import display as _display
+                    _display(tab_params)
+                    _display(tab_attrs)
+                except Exception:
+                    print(tab_params)
+                    print(tab_attrs)
+
+            return tab_params, tab_attrs
+
+        # Default: pandas DataFrames
+        if display:
+            try:
+                from IPython.display import display as _display
+                _display(df_params)
+                _display(df_attrs)
+            except Exception:
+                print(df_params.to_string(index=False))
+                print()
+                print(df_attrs.to_string(index=False))
+
+        return df_params, df_attrs
 
 ################################################################################
 # - SYSTEM CLASS ------------------------------------------------------------- #
@@ -825,6 +973,10 @@ class System(ParameterContainer):
         def search_TLS(self):
             pass
 
+    # Parameter Query -------------------------------------------------------- #
+    def query_simbad(self, name=None):
+        self = query.query_simbad(self, name)
+
     # Conveniences ----------------------------------------------------------- #
     def to_obsidian(self, filepath=''):
         
@@ -841,6 +993,8 @@ n-confirmed: \n\
 '
 
         exoarchv = f'*[This system on Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/overview/{self.name})*\n'
+        if hasattr(self, 'tic'):
+            exoarchv += f'*[This system on ExoFOP](https://exofop.ipac.caltech.edu/tess/target.php?id={self.tic})*\n'
 
         info = '\n- \n\n\
 > [!paper] Relevant Papers\n\
@@ -904,12 +1058,18 @@ class Star(ParameterContainer):
         self.planets.append(planet)
         planet.host_stars.append(self)
 
+    def query_simbad(self, name=None):
+        self = query.query_simbad(self, name)
+
+    def query_tic(self, tic=None):
+        self = query.query_tic(self)
+
 # ---------------------------------------------------------------------------- #
 # Planet class                                                                 #
 # ---------------------------------------------------------------------------- #
 
 class Planet(ParameterContainer):
-    def __init__(self, name='Unnamed Star'):
+    def __init__(self, name='Unnamed Planet'):
         super().__init__()
         self.name = name
         self.system = None

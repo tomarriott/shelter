@@ -4,5 +4,6 @@ from . import data
 from . import fit
 from . import io
 from . import plotting
+from . import query
 from . import mappings
 from . import utils

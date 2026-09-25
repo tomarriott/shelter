@@ -126,7 +126,7 @@ def residual_line(ax, median, uncertainty, nlines=3, colour1='#40A1A1', colour2=
 
 def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
                   colour='#f04f4f', transit_line_colour='#40a1a1',
-                  data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                  data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                   **kwargs):
 
     errorbar_colour = Colour(colour, 'Hex', alpha=1)
@@ -331,7 +331,7 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
 
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
                     colour='#f04f4f', transit_line_colour='#40a1a1',
-                    data_errorbar_args={}, bin_data_args={}, bin_errorbar_args={},
+                    data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                     figsize=(10, 6), save=False, save_path=os.path.join(get_directory(), 'lightcurve.png'),
                     **kwargs):
     
@@ -387,8 +387,8 @@ def ax_lightcurves(ax, lcs, transit_times={}, offset=0.2):
 # Phasefold plotting                                                           #
 # ---------------------------------------------------------------------------- #
 
-def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                 colour='#f04f4f',
+def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth=None, scale=1,
+                 plot_bin=True, colour='#f04f4f',
                  data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                  **kwargs):
 
@@ -405,7 +405,7 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
     bin_data_def.update(bin_data_args)
     bin_errorbar_def.update(bin_errorbar_args)
     
-    ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr), plot_bin=plot_bin, colour=colour,
+    ax_lightcurve(ax, *fold_data(t, y, period=period, t0=t0, e=yerr, scale=scale), plot_bin=plot_bin, colour=colour,
                   data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
 
     ax.set_xlabel('Phase')
@@ -418,8 +418,8 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
         ax.set_ylim(ylims)
 
 
-def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, plot_bin=True,
-                   colour='#f04f4f',
+def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=None, scale=1,
+                   plot_bin=True, colour='#f04f4f',
                    data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                    **kwargs):
 
@@ -436,7 +436,7 @@ def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=N
     bin_data_def.update(bin_data_args)
     bin_errorbar_def.update(bin_errorbar_args)
 
-    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, plot_bin, colour, data_errorbar_def, bin_data_def, bin_errorbar_def, **kwargs)
+    plot_axes(ax_phasefold, t, y, yerr, period, t0, duration, depth, scale, plot_bin, colour, data_errorbar_def, bin_data_def, bin_errorbar_def, **kwargs)
 
 
 def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,

@@ -748,7 +748,7 @@ def fold_data_alternate(t, y, e=None, period=None, t0=None):
 
 
 # TODO: refactor for generality
-def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
+def is_within_observed_data(t, time, duration=None, gap_threshold=None, gap_factor=5):
     """
     Check if a given transit time falls within any observed segment of the lightcurve data, 
     accounting for gaps.
@@ -763,6 +763,8 @@ def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
     """
     if len(time) < 2:
         return False  # Not enough data to define segments
+
+    half_dur = duration / 2 if duration is not None else 0.0
 
     # Sort time to ensure correct order
     time = np.sort(time)
@@ -779,19 +781,19 @@ def is_within_observed_data(t, time, gap_threshold=None, gap_factor=5):
     for i in range(len(dt)):
         if dt[i] > gap_threshold:
             segment_end = time[i]  # End of this segment
-            if segment_start <= t <= segment_end:
+            if segment_start-half_dur <= t <= segment_end+half_dur:
                 return True  # Transit is within this segment
             segment_start = time[i + 1]  # Start a new segment
 
     # Check last segment
-    if segment_start <= t <= time[-1]:
+    if segment_start-half_dur <= t <= time[-1]+half_dur:
         return True
 
     return False  # Transit falls within a gap
 
-
+'''
 # TODO: refactor for generality
-def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
+def get_transits_in_data(time, period, t0, duration=None, epoch=0, return_all=False):
     """
     Get transit times for a planet that fall within the lightcurve data range, accounting for gaps.
     The transit numbers are adjusted to start from 0.
@@ -804,6 +806,8 @@ def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
     Returns:
     - A dictionary where keys are transit sequence numbers starting from 0, and values are transit times.
     """
+    
+
     # Define planet transit variables
     t0 = t0 - epoch
 
@@ -817,7 +821,7 @@ def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
     # Identify transits that fall within the observed lightcurve segments
     valid_transits = {}
     for n, t in zip(transit_numbers, transit_times):
-        if is_within_observed_data(t, time):  # Check if this transit falls within observed data
+        if is_within_observed_data(t, time, duration):  # Check if this transit falls within observed data
             valid_transits[int(n)] = t
 
     # Adjust transit numbers to start from 0
@@ -829,6 +833,100 @@ def get_transits_in_data(time, period, t0, epoch=0, return_all=False):
 
     if return_all:
         all_transits = {int(n) - min_transit_number: t for n, t in zip(transit_numbers[1:], transit_times[1:])}
+        return valid_transits, all_transits
+    return valid_transits
+'''
+
+def _to_segments(time, gap_threshold=None, gap_factor=5):
+    """
+    Convert `time` into arrays of segment starts and ends.
+
+    `time` may be:
+      - a 1D array-like of times (one timeseries)
+      - an array-like of (start, end) pairs
+      - an array-like of 1D timeseries (ragged is fine)
+      - any mixture of the last two, e.g. [np.array([...]), (start, end)]
+    """
+    items = list(time)
+    if not items:
+        return np.array([]), np.array([])
+
+    ndims = {np.ndim(v) for v in items}
+    if ndims == {0}:
+        groups = [np.asarray(items, dtype=float)]           # single timeseries
+    elif ndims == {1}:
+        groups = [np.asarray(v, dtype=float) for v in items]  # timeseries and/or intervals
+    else:
+        raise ValueError(
+            f"`time` must be all scalars or all 1D array-likes, got element ndims {sorted(ndims)}"
+        )
+
+    starts, ends = [], []
+    for g in groups:
+        g = np.sort(g[np.isfinite(g)])
+        if len(g) < 2:
+            continue  # not enough data to define a segment
+
+        dt = np.diff(g)
+        thr = gap_threshold if gap_threshold is not None else gap_factor * np.median(dt)
+
+        breaks = np.flatnonzero(dt > thr)  # index of the last point before each gap
+        starts.append(np.concatenate(([g[0]], g[breaks + 1])))
+        ends.append(np.concatenate((g[breaks], [g[-1]])))
+
+    if not starts:
+        return np.array([]), np.array([])
+    return np.concatenate(starts), np.concatenate(ends)
+
+
+def is_within_segments(t, starts, ends, duration=None):
+    """True if transit time `t` (padded by half the duration) overlaps any segment."""
+    half_dur = duration / 2 if duration is not None else 0.0
+    return bool(np.any((starts - half_dur <= t) & (t <= ends + half_dur)))
+
+
+def get_transits_in_data(time, period, t0, duration=None, epoch=0,
+                         return_all=False, gap_threshold=None, gap_factor=5):
+    """
+    Get transit times that fall within the observed data, accounting for gaps.
+    Transit numbers are adjusted to start from 0.
+
+    Parameters:
+    - time: 1D array of times, OR an array-like of (start, end) pairs,
+            OR an array-like of timeseries, OR a mixture of the latter two.
+    - period, t0, duration, epoch: transit ephemeris.
+    - gap_threshold / gap_factor: gap definition, applied per timeseries.
+    """
+    starts, ends = _to_segments(time, gap_threshold, gap_factor)
+    if len(starts) == 0:
+        return ({}, {}) if return_all else {}
+
+    t0 = t0 - epoch
+    t_min, t_max = starts.min(), ends.max()
+
+    transit_numbers = np.arange(
+        np.floor((t_min - t0) / period),
+        np.ceil((t_max - t0) / period),
+    )
+    transit_times = t0 + transit_numbers * period
+
+    valid_transits = {
+        int(n): t
+        for n, t in zip(transit_numbers, transit_times)
+        if is_within_segments(t, starts, ends, duration)
+    }
+
+    if valid_transits:
+        min_transit_number = min(valid_transits)
+    else:
+        min_transit_number = int(transit_numbers[0]) if len(transit_numbers) else 0
+    valid_transits = {n - min_transit_number: t for n, t in valid_transits.items()}
+
+    if return_all:
+        all_transits = {
+            int(n) - min_transit_number: t
+            for n, t in zip(transit_numbers[1:], transit_times[1:])
+        }
         return valid_transits, all_transits
     return valid_transits
 
@@ -865,6 +963,7 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
             - 'long' selects 10-min and 30-min cadences.
             - 'short' selects 1-min and 2-min cadences.
             - 'fast' selects 20-sec cadences.
+            - 'all' selects all cadences.
         By default, the longest cadences will be returned.
     selection : dict, string, list, or int, optional
         The indices of the lightcurves for each cadence to download.
@@ -912,9 +1011,9 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
         durations = []
         transit_times = []
         for planet in system.planets:
-            periods.append(planet.period)
-            durations.append(planet.duration / (24 / tolerance))
-            transit_times.append(planet.time_of_midtransit)
+            periods.append(planet.period.value)
+            durations.append(planet.duration.value / (24 / tolerance))
+            transit_times.append(planet.time_of_midtransit.value)
 
         transit_mask = lc.create_transit_mask(periods, transit_times, durations)
         if only_mask:
@@ -1026,7 +1125,12 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                                 instrument += ('-' + cadence)
 
                             # Search for lightcurve data --------------------- #
-                            print(f"Downloading {cadence}-second lightcurve data by {author} from {mission} for {system_name}.")
+                            if isinstance(cadence, str):
+                                substr = cadence + '-cadence'
+                            else:
+                                substr = cadence + '-second'
+                            print(f"Downloading {substr} lightcurve data by {author} from {mission} for {system_name}.")
+                            
                             search_result = lk.search_lightcurve(system_name, mission=mission, author=author, exptime=cadence)
                             print(search_result)
 
@@ -1041,7 +1145,8 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                                     cadence = max(search_result.exptime)
                                 elif cadence == 'shortest':
                                     cadence = min(search_result.exptime)
-                                search_result = search_result[search_result.exptime == cadence]
+                                if cadence != 'all':
+                                    search_result = search_result[search_result.exptime == cadence]
 
                                 # Download and stitch lightcurves ------------ #
                                 lc_collection = search_result.download_all()
