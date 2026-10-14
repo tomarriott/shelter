@@ -26,6 +26,8 @@ def query_simbad(system, name=None):
     system.tic = _get_id(all_ids, 'TIC ')
     system.toi = _get_id(all_ids, 'TOI-')
     system.gaia = _get_id(all_ids, 'Gaia DR3 ')
+    system.gaiadr2 = _get_id(all_ids, 'Gaia DR2 ')
+    system.gaiadr3 = _get_id(all_ids, 'Gaia DR3 ')
     system.twomass = _get_id(all_ids, '2MASS ')
     system.wise = _get_id(all_ids, 'WISEA ')
 

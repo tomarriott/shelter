@@ -2,6 +2,7 @@ import os
 import copy
 import warnings
 import numpy as np
+from scipy.stats import median_abs_deviation
 from .utils import to_list_of_arrays, get_epoch, extract_kwargs
 from .io import get_directory
 import traceback
@@ -23,7 +24,7 @@ class TimeSeries:
         self.y = np.asanyarray(y)
         if e is not np.nan:
             if len(e) != len(y):
-                e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=np.std(y)).reshape(len(y))
+                e = np.pad(e, (0, len(y) - len(e)), mode='constant', constant_values=median_abs_deviation(y, nan_policy='omit')).reshape(len(y))
         else:
             e = np.ones(len(y)) * e
         self.e = np.asanyarray(e)
@@ -34,7 +35,7 @@ class TimeSeries:
     def __len__(self):
         return len(self.t)
 
-    def __getitem__(self, index):
+    def getitem_old(self, index):
         if isinstance(index, (int, np.integer)):
             return self.t[index], self.y[index], self.e[index]
         elif isinstance(id, slice):
@@ -54,6 +55,36 @@ class TimeSeries:
             raise IndexError(
                 "only integers, slices (`:`) and integer or boolean arrays are valid indices"
             )
+
+    def __getitem__(self, index):
+        if isinstance(index, (int, np.integer)):
+            return self.t[index], self.y[index], self.e[index]
+
+        if isinstance(index, slice):
+            return type(self)(self.t[index], self.y[index], self.e[index], self.instrument)
+
+        index = np.asarray(index)
+
+        if index.dtype == bool:
+            if len(index) != len(self.t):
+                raise IndexError(
+                    f"boolean index did not match indexed array; dimension is {len(self.t)} "
+                    f"but corresponding boolean dimension is {len(index)}"
+                )
+            idx = np.nonzero(index)[0]
+        elif np.issubdtype(index.dtype, np.integer):
+            idx = index
+        else:
+            raise IndexError(
+                "only integers, slices (`:`) and integer or boolean arrays are valid indices"
+            )
+
+        return type(self)(
+            [self.t[i] for i in idx],
+            [self.y[i] for i in idx],
+            [self.e[i] for i in idx],
+            self.instrument,
+        )
         
     def copy(self):
         return copy.copy(self)
@@ -65,7 +96,7 @@ class TimeSeries:
         self.t = np.append(self.t, np.asanyarray(t))
         self.y = np.append(self.y, np.asanyarray(y))
         if len(e) != len(y):
-            e = np.pad(np.asanyarray(e), (np.std(y), len(y) - len(e))).reshape(len(y))
+            e = np.pad(np.asanyarray(e), (median_abs_deviation(y, nan_policy='omit'), len(y) - len(e))).reshape(len(y))
         self.e = np.append(self.e, e)
 
     def order_data(self):
@@ -375,17 +406,20 @@ class LightCurve(TimeSeries):
             transit_params = batman.TransitParams()
 
             if planet is not None:
+                # Use the given planet object -------------------------------- #
                 for key in batman_params.keys():
                     setattr(transit_params, batman_params[key], getattr(planet, key))
             elif len(params) > 0:
+                # Use the params dict (keys should match what batman wants) -- #
                 for key in params.keys():
-                    setattr(transit_params, params[key])
+                    setattr(transit_params, key, params[key])
             else:
                 print('Either a Planet object or a dict of parameters must be provided')
                 return self
 
-            sim_flux = batman.TransitModel(params, return_lc.t).light_curve(transit_params)                    # calculates light curve
-            return_lc.y = return_lc.y * sim_flux 
+            # Generate simulated transits & inject --------------------------- #
+            sim_flux = batman.TransitModel(transit_params, return_lc.t).light_curve(transit_params)
+            return_lc.y = return_lc.y * sim_flux
 
             return return_lc
 
@@ -511,7 +545,7 @@ def to_lightkurve(lc, **kwargs):
 def from_lightkurve(lc):
     t = lc.time.value  # in days
     y = lc.flux.value
-    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
+    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, median_abs_deviation(y, nan_policy='omit'))
     return LightCurve(t, y, e)
 
 
@@ -602,7 +636,7 @@ def bin_data(t, y, yerr=None, n_points=None, n_bins=None, t_bins=None, method='m
     if not (t.shape == y.shape == yerr.shape):
         raise ValueError("t, y, and yerr must have the same length.")
     if not no_yerr:
-        if np.any(yerr <= 0):
+        if np.any(yerr < 0):
             raise ValueError("All yerr values must be strictly positive.")
 
     n_specified = sum(x is not None for x in (n_points, n_bins, t_bins))
@@ -1177,7 +1211,7 @@ def get_lightcurve(system_name, lc_directory=get_directory(), cache_directory=No
                                     # Extract time and flux data ------------- #
                                     t = lc.time.value  # in days
                                     y = lc.flux.value
-                                    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, np.std(y))
+                                    e = lc.flux_err.value if lc.flux_err is not None else np.full_like(y, median_abs_deviation(y, nan_policy='omit'))
 
                                     # Convert data to plain NumPy arrays ----- #
                                     t_data = np.array(t.data if hasattr(t, 'data') else t)

@@ -51,13 +51,13 @@ def plot_axes(func, *args, figsize=(10, 6), save=False, save_path='', xlims=None
 
     fig.tight_layout()
 
-    if not save:
-        plt.show()
-
     if xlims is not None:
         ax.set_xlim(*xlims)
     if ylims is not None:
         ax.set_ylim(*ylims)
+
+    if not save:
+        plt.show()
 
     if save:
         savefig_args = extract_kwargs(plt.savefig, kwargs)
@@ -134,7 +134,7 @@ def ax_lightcurve(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
     marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def = {'ms':1, 'elinewidth': 1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -203,7 +203,7 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
         is a single-element list containing the original `ax`.
     """
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def = {'ms':1, 'elinewidth': 1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -329,6 +329,191 @@ def ax_lightcurve_broken(ax, t, y, yerr=None, transit_times=[], plot_bin=False,
     return axes
 
 
+def ax_lightcurve(ax, t, y, yerr=None, transit_times=None, plot_bin=False,
+                  colour='#f04f4f', transit_line_colour='#40a1a1',
+                  data_errorbar_args=None, bin_data_args={'n_points': 200}, bin_errorbar_args=None,
+                  split_axes=False, break_gap=10, break_factor=10, break_wspace=0.06,
+                  break_mark_size=0.4, min_seg_width_frac=0.06,
+                  **kwargs):
+    """
+    Plot a lightcurve, optionally splitting the x-axis across large gaps in `t`.
+ 
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes or None
+        Axes to draw on. If `split_axes` is True and a gap is found, this axes
+        is removed and replaced by a row of sub-axes occupying the same slot.
+    t, y, yerr : array-like
+        Time, flux and (optional) flux uncertainty.
+    transit_times : list, array or dict
+        Times at which to draw vertical transit lines.
+    plot_bin : bool
+        Overplot binned data.
+    colour, transit_line_colour : str
+        Hex colours for the data and the transit lines.
+    data_errorbar_args, bin_data_args, bin_errorbar_args : dict
+        Overrides for the data errorbar call, bin_data call and binned errorbar call.
+ 
+    Axis-splitting parameters (only used if `split_axes=True`)
+    ----------------------------------------------------------
+    split_axes : bool
+        If True, break the x-axis at gaps in `t`.
+    break_gap : float or None
+        Minimum gap size (units of `t`) that triggers a break. If None, set
+        automatically as `break_factor * median(diff(t))`.
+    break_factor : float
+        Multiplier on the median cadence for automatic gap detection.
+    break_wspace : float
+        GridSpec `wspace` between segments.
+    break_mark_size : float
+        Size of the diagonal break marks (default 0.4 gives the standard size).
+    min_seg_width_frac : float
+        Minimum width of any segment as a fraction of the widest segment, so
+        short clusters of points still get a visible panel.
+ 
+    Returns
+    -------
+    axes : list of matplotlib.axes.Axes
+        Axes used for plotting, left to right. A single-element list if the
+        axis was not split.
+    """
+ 
+    # ---- colours / default argument dicts (from the up-to-date version) ----
+    errorbar_colour = Colour(colour, 'Hex', alpha=1)
+    errorbar_hsv = errorbar_colour.get_colour('HSV')
+    marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
+    marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
+ 
+    data_errorbar_def = {'ms': 1, 'elinewidth': 1, 'ls': 'none', 'fmt': 'o', 'c': colour, 'mfc': colour,
+                         'mec': marker_colour.get_colour('Hex'), 'alpha': 0.5, 'zorder': 2}
+    bin_data_def = {}
+    bin_errorbar_def = {'ms': 4, 'capsize': 2, 'elinewidth': 1, 'fmt': 'o', 'mfc': 'w',
+                        'mec': 'k', 'ecolor': 'k', 'zorder': 20}
+ 
+    data_errorbar_def.update(data_errorbar_args or {})
+    bin_data_def.update(bin_data_args or {})
+    bin_errorbar_def.update(bin_errorbar_args or {})
+ 
+    # ---- inputs ----
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    yerr = np.zeros_like(y) if yerr is None else np.asarray(yerr, dtype=float)
+ 
+    if transit_times is None:
+        transit_times = []
+    if isinstance(transit_times, dict):
+        transit_times = transit_times.values()
+    transit_times = np.array(list(transit_times))
+ 
+    if ax is None:
+        ax = plt.axes()
+ 
+    # sort by time (needed for gap detection and segment splitting)
+    order = np.argsort(t)
+    t, y, yerr = t[order], y[order], yerr[order]
+ 
+    t_bin = y_bin = yerr_bin = None
+    if plot_bin:
+        t_bin, y_bin, yerr_bin = bin_data(t, y, yerr, **bin_data_def)
+        t_bin, y_bin, yerr_bin = np.asarray(t_bin), np.asarray(y_bin), np.asarray(yerr_bin)
+ 
+    def _draw(a, tt, yy, ee, tb=None, yb=None, eb=None):
+        """Draw data, transit lines and (optionally) binned data on one axes."""
+        a.errorbar(tt, yy, yerr=ee, **data_errorbar_def)
+        for transit in transit_times:
+            a.axvline(transit, c=transit_line_colour, alpha=0.5, zorder=4, linestyle='--',
+                      path_effects=[Stroke(linewidth=3, foreground='w', alpha=0.5), Normal()])
+        if tb is not None and len(tb) > 0:
+            a.errorbar(tb, yb, eb, **bin_errorbar_def)
+ 
+    # ---- detect gaps (only if splitting was requested) ----
+    n_seg = 1
+    if split_axes and len(t) > 1:
+        diffs = np.diff(t)
+        thresh = break_gap if break_gap is not None else break_factor * np.median(diffs)
+        split_points = np.where(diffs > thresh)[0] + 1
+        t_segs = np.split(t, split_points)
+        y_segs = np.split(y, split_points)
+        yerr_segs = np.split(yerr, split_points)
+        n_seg = len(t_segs)
+ 
+    # ---- single axes: same behaviour as the original function ----
+    if n_seg == 1:
+        _draw(ax, t, y, yerr, t_bin, y_bin, yerr_bin)
+        ax.set_xlabel('Time (BJD)')
+        ax.set_ylabel('Flux')
+        return [ax]
+ 
+    # ---- multiple segments: replace `ax` with a row of sub-axes ----
+    fig = ax.figure
+    try:
+        subspec = ax.get_subplotspec()
+    except AttributeError:
+        subspec = None
+    pos = ax.get_position()
+    ax.remove()
+ 
+    spans = np.array([seg[-1] - seg[0] if len(seg) > 1 else 0.0 for seg in t_segs])
+    max_span = spans.max() if spans.max() > 0 else 1.0
+    width_ratios = np.clip(spans, min_seg_width_frac * max_span, None)
+    width_ratios = width_ratios / width_ratios.sum()
+ 
+    if subspec is not None:
+        gs = GridSpecFromSubplotSpec(1, n_seg, subplot_spec=subspec,
+                                     width_ratios=width_ratios, wspace=break_wspace)
+    else:
+        gs = GridSpec(1, n_seg, width_ratios=width_ratios, wspace=break_wspace,
+                      left=pos.x0, right=pos.x1, bottom=pos.y0, top=pos.y1)
+ 
+    axes = []
+    for i in range(n_seg):
+        axes.append(fig.add_subplot(gs[0, i], sharey=axes[0] if axes else None))
+ 
+    for i, sub_ax in enumerate(axes):
+        tb = yb = eb = None
+        if plot_bin:
+            mask = (t_bin >= t_segs[i][0]) & (t_bin <= t_segs[i][-1])
+            if mask.any():
+                tb, yb, eb = t_bin[mask], y_bin[mask], yerr_bin[mask]
+        _draw(sub_ax, t_segs[i], y_segs[i], yerr_segs[i], tb, yb, eb)
+ 
+        span = t_segs[i][-1] - t_segs[i][0] if len(t_segs[i]) > 1 else 1.0
+        pad = max(span * 0.05, 1e-6)
+        sub_ax.set_xlim(t_segs[i][0] - pad, t_segs[i][-1] + pad)
+ 
+    # hide the inner spines/ticks so it reads as one broken panel
+    for i, sub_ax in enumerate(axes):
+        if i > 0:
+            sub_ax.spines['left'].set_visible(False)
+            sub_ax.tick_params(labelleft=False, left=False, which='both')
+        if i < n_seg - 1:
+            sub_ax.spines['right'].set_visible(False)
+            sub_ax.tick_params(right=False, which='both')
+ 
+    # diagonal break marks at each seam
+    d = 0.015 * break_mark_size / 0.4
+    mark_kwargs = dict(color='k', clip_on=False, lw=1)
+    for i in range(n_seg - 1):
+        left_ax, right_ax = axes[i], axes[i + 1]
+        left_ax.plot((1 - d, 1 + d), (-d, +d), transform=left_ax.transAxes, **mark_kwargs)
+        left_ax.plot((1 - d, 1 + d), (1 - d, 1 + d), transform=left_ax.transAxes, **mark_kwargs)
+        right_ax.plot((-d, +d), (-d, +d), transform=right_ax.transAxes, **mark_kwargs)
+        right_ax.plot((-d, +d), (1 - d, 1 + d), transform=right_ax.transAxes, **mark_kwargs)
+ 
+    axes[0].set_ylabel('Flux')
+ 
+    # one x-label centred across the whole group, via an invisible axes spanning the slot
+    if subspec is None:
+        subspec = fig.add_gridspec(1, 1, left=pos.x0, right=pos.x1,
+                                   bottom=pos.y0, top=pos.y1)[0, 0]
+    label_ax = fig.add_subplot(subspec, frameon=False)
+    label_ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+    label_ax.set_xlabel('Time (BJD)')
+    label_ax.set_zorder(-1)
+ 
+    return axes
+
+
 def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
                     colour='#f04f4f', transit_line_colour='#40a1a1',
                     data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
@@ -340,7 +525,7 @@ def plot_lightcurve(t, y, yerr=None, transit_times=[], plot_bin=False,
     marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
     marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def = {'ms':1, 'elinewidth': 1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def = {'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -397,7 +582,7 @@ def ax_phasefold(ax, t, y, yerr=None, period=None, t0=None, duration=None, depth
     marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
     marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def = {'ms':1, 'elinewidth': 1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -428,7 +613,7 @@ def plot_phasefold(t, y, yerr=None, period=None, t0=None, duration=None, depth=N
     marker_hsv = errorbar_hsv - [0, 0.08, 0.63]
     marker_colour = Colour(marker_hsv, 'HSV', alpha=1)
 
-    data_errorbar_def = {'ms':1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def = {'ms':1, 'elinewidth': 1, 'ls':'none', 'fmt':'o', 'c':colour, 'mfc':colour, 'mec':marker_colour.get_colour('Hex'), 'alpha':0.5, 'zorder':2,}
     bin_data_def = {}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 
@@ -443,7 +628,7 @@ def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
                  data_errorbar_args={}, bin_data_args={'n_points': 200}, bin_errorbar_args={},
                  **kwargs):
 
-    data_errorbar_def={'ms':1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
+    data_errorbar_def={'ms':1, 'elinewidth': 1, 'ls':'none', 'c':'#f04f4f', 'fmt':'o', 'mfc':'#f04f4f', 'mec':'#4f2020', 'alpha':0.5, 'zorder':2,}
     bin_data_def={}
     bin_errorbar_def={'ms':4, 'capsize':2, 'elinewidth':1, 'fmt':'o', 'mfc':'w', 'mec':'k', 'ecolor':'k','zorder':20}
 

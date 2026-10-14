@@ -158,7 +158,7 @@ star_units = {
 batman_params = {
     "time_of_midtransit":   "t0",
     "period":               "per",
-    "scald_radius":         "rp",
+    "scaled_radius":        "rp",
     "scaled_semimajor_axis":"a",
     "inclination":          "inc",
     "eccentricity":         "ecc",

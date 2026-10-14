@@ -979,12 +979,27 @@ class System(ParameterContainer):
 
     # Conveniences ----------------------------------------------------------- #
     def to_obsidian(self, filepath=''):
+
+        aliases = ''
+        if hasattr(self, 'tic'):
+            aliases += f'TIC {self.tic}'
+        if hasattr(self, 'gaiadr2'):
+            aliases += f'Gaia DR2 {self.gaiadr2}'
+        if hasattr(self, 'gaiadr3'):
+            aliases += f'Gaia DR3 {self.gaiadr3}'
+        if (not hasattr(self, 'gaiadr2')) or (not hasattr(self, 'gaiadr3')):
+            if hasattr(self, 'gaia'):
+                aliases += f'Gaia DR3 {self.gaia}'
+        if hasattr(self, 'twomass'):
+            aliases += f'2MASS {self.twomass}, '
+        if hasattr(self, 'WISE'):
+            aliases += f'WISEA {self.wise}, '
         
         yaml = f'\
 ---\n\
 tags:\n\
     - system\n\
-aliases: \n\
+aliases: {aliases}\n\
 n-stars: {len(self.stars)}\n\
 n-planets: {len(self.planets)}\n\
 n-candidates: \n\
