@@ -504,40 +504,27 @@ class ParameterContainer:
         self._parameters = {}
         self._aliases = {}
 
-        self._suffix_map = {}
-        for canonical, alts in uncertainty_suffixes.items():
-            attr = canonical.lstrip('_')
-            self._suffix_map[canonical] = attr
-            for alt in alts:
-                self._suffix_map[alt] = attr
+    def __init__(self):
+        self._parameters = {}
+        self._aliases = {}
 
     def set_param(self, name, value, upper=None, lower=None, aliases=None):
         '''Set a parameter. Optionally include uncertainties.'''
         param = Parameter(value, upper, lower, aliases=[name] + (aliases or []))
         self._parameters[name] = param
         for alias in param.aliases:
+            self.__dict__.pop(alias, None)  # evict stale plain attributes that would shadow the Parameter
             self._aliases[alias] = name
-            for suffix in self._suffix_map:
-                self._aliases[f"{alias}{suffix}"] = f"{name}{suffix}"
 
     def get_param(self, name):
-        '''Retrieve a parameter.'''
-        real_name = self._aliases.get(name, name)
-        base, suffix_attr = self._split_suffix(real_name)
-        param = self._parameters.get(base)
-        if not param:
-            return None
-        return getattr(param, suffix_attr) if suffix_attr else param
-
-    def _split_suffix(self, name):
-        for suffix, attr in self._suffix_map.items():
-            if name.endswith(suffix):
-                return name[:-len(suffix)], attr
-        return name, None
+        '''Retrieve a parameter (by name or alias), or None if it doesn't exist.'''
+        return self._parameters.get(self._aliases.get(name, name))
 
     def __getattr__(self, name):
-        if name in self.__dict__:
-            return self.__dict__[name]
+        # Only called when normal lookup fails. Guard private names so that
+        # copy/pickle (where _aliases may not exist yet) can't recurse forever.
+        if name.startswith('_'):
+            raise AttributeError(name)
         return self.get_param(name)
 
     def __setattr__(self, name, value):
@@ -545,17 +532,10 @@ class ParameterContainer:
             super().__setattr__(name, value)
             return
 
-        if '_aliases' in self.__dict__:
-            real_name = self._aliases.get(name)
-            if real_name:
-                base, suffix_attr = self._split_suffix(real_name)
-                param = self._parameters.get(base)
-                if param:
-                    if suffix_attr:
-                        setattr(param, suffix_attr, value)
-                    else:
-                        param.value = value
-                    return
+        real_name = self.__dict__.get('_aliases', {}).get(name)
+        if real_name:
+            self._parameters[real_name].value = value
+            return
 
         super().__setattr__(name, value)
 
@@ -611,7 +591,7 @@ class ParameterContainer:
                 except KeyError:
                     print(f'{header} uncertainties not in data headers, skipping.')
 
-                self.set_param(key, value, upper, lower, aliases[key])
+                self.set_param(key, value, upper, lower, (aliases or {}).get(key))
             
             except KeyError:
                 print(f'{header} not in data headers, skipping.')

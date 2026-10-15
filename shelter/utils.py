@@ -32,7 +32,7 @@ def get_epoch(mission):
         return None
 
 def get_alias_mask(periods, period, threshold=0.1, order=[1/4, 1/3, 1/2, 1, 2, 3, 4]):
-    mask = np.ones(len(periods)) * np.bool(False)
+    mask = np.ones(len(periods)) * False
 
     for l in order:
         alias = period * l

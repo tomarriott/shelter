@@ -638,14 +638,14 @@ def ax_oddeven(ax, t, y, yerr=None, period=None, t0=None, plot_bin=True,
 
     axes = split_axis(ax, nrows=1, ncols=2, share='none', hspace=0, wspace=0)
 
-    ax_lightcurve(axes[0], *fold_data(t, y, period=2*period, t0=t0, e=yerr), plot_bin=plot_bin,
+    ax_lightcurve(axes[0], *fold_data(t, y, period=2*period, t0=(t0+period), e=yerr), plot_bin=plot_bin,
                   data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
     
     axes[0].set_xlabel('Phase')
     axes[0].set_ylabel('Flux')
     axes[0].yaxis.set_ticks_position('left')
     
-    ax_lightcurve(axes[1], *fold_data(t, y, period=2*period, t0=(t0+period), e=yerr), plot_bin=plot_bin,
+    ax_lightcurve(axes[1], *fold_data(t, y, period=2*period, t0=t0, e=yerr), plot_bin=plot_bin,
                   data_errorbar_args=data_errorbar_def, bin_data_args=bin_data_def, bin_errorbar_args=bin_errorbar_def, **kwargs)
     
     axes[1].set_xlabel('Phase')
@@ -925,13 +925,13 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
                  path_effects=[withStroke(linewidth=3, foreground='w', alpha=0.8)])
     
     ax_info.text(0.5, 850/900,
-                 f'TIC {star.name}', size='x-large', verticalalignment='top', horizontalalignment='center')
+                 f'TIC {star.tic}', size='x-large', verticalalignment='top', horizontalalignment='center')
     
     ax_info.text(0.5, 820/900,
-                 f'Gaia DR2:\n{star.gaia}', size='medium', verticalalignment='top', horizontalalignment='center')
+                 f'Gaia DR2:\n{star.gaiadr2}', size='medium', verticalalignment='top', horizontalalignment='center')
     
     ax_info.text(0.5, 775/900,
-                 f'2MASS:\n{star._2MASS}', size='medium', verticalalignment='top', horizontalalignment='center')
+                 f'2MASS:\n{star.twomass}', size='medium', verticalalignment='top', horizontalalignment='center')
 
     ax_info.text(20/240, 640/900, f'RA:\nDec:\nDist:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
@@ -945,13 +945,13 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_info.text(20/240, 500/900, f'TESS:\nI:\nH:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(120/240, 500/900, f'{star.TESSmag:.1f}\n{star.Imag:.1f}\n{star.Hmag:.1f}',
+    ax_info.text(120/240, 500/900, f'{star.Tmag.value:.1f}\n{star.Imag.value:.1f}\n{star.Hmag.value:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
-    ax_info.text(140/240, 500/900, f'G:\nJ:\nK:',
+    ax_info.text(140/240, 500/900, f'Gaia:\nJ:\nK:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 500/900, f'{star.Gmag:.1f}\n{star.Jmag:.1f}\n{star.Kmag:.1f}',
+    ax_info.text(220/240, 500/900, f'{star.Gmag.value:.1f}\n{star.Jmag.value:.1f}\n{star.Kmag.value:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
 
     ax_info.text(20/240, 390/900, f'Mass ($\\text{{M}}_{{\odot}}$):\nRadius ($\\text{{R}}_{{\odot}}$):\nTeff (K):',
@@ -986,14 +986,14 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
         from .tpfplotter.tpfplotter import plot_tpf
 
         #tic=system.name.replace('TIC ', '')
-        plot_tpf(tic=str(star.name), ax=ax_neighborhood)
+        plot_tpf(tic=str(star.tic), ax=ax_neighborhood)
     except Exception as e:
-        print(f'Error making tpfplot for {star.name}: {e}')
+        print(f'Error making tpfplot for TIC {star.name}: {e}')
         traceback.print_exc()
         title_text(ax_neighborhood, 'TPFplot broke :(', position=(0.5, 0.5))
 
     # Phasefold -------------------------------------------------------------- #
-    xlims = -(2 * duration)/(tls_results.period), (2 * duration)/(tls_results.period)
+    xlims = -(4 * duration)/(tls_results.period), (4 * duration)/(tls_results.period)
     ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
 
     ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/20})
