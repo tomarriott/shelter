@@ -951,7 +951,7 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_info.text(140/240, 500/900, f'Gaia:\nJ:\nK:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(220/240, 500/900, f'{star.Gmag.value:.1f}\n{star.Jmag.value:.1f}\n{star.Kmag.value:.1f}',
+    ax_info.text(220/240, 500/900, f'{star.GAIAmag.value:.1f}\n{star.Jmag.value:.1f}\n{star.Kmag.value:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
 
     ax_info.text(20/240, 390/900, f'Mass ($\\text{{M}}_{{\odot}}$):\nRadius ($\\text{{R}}_{{\odot}}$):\nTeff (K):',

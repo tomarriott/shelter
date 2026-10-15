@@ -1046,8 +1046,6 @@ class Star(ParameterContainer):
         for std, aliases in star_aliases.items():
             for alias in aliases:
                 self._aliases[alias] = std
-                for suffix in self._suffix_map:
-                    self._aliases[f"{alias}{suffix}"] = f"{std}{suffix}"
 
     def add_planet(self, planet):
         self.planets.append(planet)
@@ -1073,8 +1071,6 @@ class Planet(ParameterContainer):
         for std, aliases in planet_aliases.items():
             for alias in aliases:
                 self._aliases[alias] = std
-                for suffix in self._suffix_map:
-                    self._aliases[f"{alias}{suffix}"] = f"{std}{suffix}"
 
     def patch_data(self):
         return
