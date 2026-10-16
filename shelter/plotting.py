@@ -945,10 +945,10 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
     ax_info.text(20/240, 500/900, f'TESS:\nI:\nH:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
-    ax_info.text(120/240, 500/900, f'{star.Tmag.value:.1f}\n{star.Imag.value:.1f}\n{star.Hmag.value:.1f}',
+    ax_info.text(110/240, 500/900, f'{star.Tmag.value:.1f}\n{star.Imag.value:.1f}\n{star.Hmag.value:.1f}',
                 size='medium', verticalalignment='bottom', horizontalalignment='right', linespacing=2)
     
-    ax_info.text(140/240, 500/900, f'Gaia:\nJ:\nK:',
+    ax_info.text(130/240, 500/900, f'Gaia:\nJ:\nK:',
                 size='medium', verticalalignment='bottom', horizontalalignment='left', linespacing=2)
     
     ax_info.text(220/240, 500/900, f'{star.GAIAmag.value:.1f}\n{star.Jmag.value:.1f}\n{star.Kmag.value:.1f}',
@@ -993,14 +993,14 @@ def TLS_dashboard(tls_results, star, lc, chunks=[], save=False, save_path='', **
         title_text(ax_neighborhood, 'TPFplot broke :(', position=(0.5, 0.5))
 
     # Phasefold -------------------------------------------------------------- #
-    xlims = -(4 * duration)/(tls_results.period), (4 * duration)/(tls_results.period)
+    xlims = -(2 * duration)/(tls_results.period), (2 * duration)/(tls_results.period)
     ylims = -3*(tls_results.rp_rs)**2 + 1, 2*(tls_results.rp_rs)**2 + 1
 
-    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, bin_data_args={'t_bins': xlims[1]/20})
+    ax_phasefold(ax_phase, lc.t, lc.y, lc.e, period=tls_results.period, t0=tls_results.T0, duration=4*duration, bin_data_args={'t_bins': xlims[1]/20})
     residual_line(ax_phase, tls_results.depth_mean[0], tls_results.depth_mean[1])
     ax_phase.plot(tls_results.model_folded_phase - 0.5, tls_results.model_folded_model, c='#40A1A1', linestyle='-', zorder=10, path_effects=[Stroke(linewidth=3, foreground='w', alpha=0.5), Normal()])
 
-    ax_phase.set_xlim(xlims)
+    #ax_phase.set_xlim(xlims)
     ax_phase.set_ylim(ylims)
 
     title_text(ax_phase, 'Phasefolded Signal')

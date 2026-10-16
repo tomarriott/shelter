@@ -18,18 +18,31 @@ def query_simbad(system, name=None):
         print(f'Unable to resolve {name} with Simbad: {e}')
         return system
 
-    system.rastr = position_table['RA'].value.data[0]
-    system.decstr = position_table['DEC'].value.data[0]
+    try:
+        for r_header, d_header in zip(['RA', 'ra'], ['DEC', 'dec']):
+            try:
+                system.rastr = position_table[r_header].value.data[0]
+                system.decstr = position_table[d_header].value.data[0]
+            except:
+                continue
+    except Exception as e:
+        print(f'Error getting position for {name}: {e}')
 
-    all_ids = [item.decode() for item in id_table['ID'].value]
+    try:
+        try:
+            all_ids = [item.decode() for item in id_table['ID'].value]
+        except:
+            all_ids = [item for item in id_table['id'].value]
 
-    system.tic = _get_id(all_ids, 'TIC ')
-    system.toi = _get_id(all_ids, 'TOI-')
-    system.gaia = _get_id(all_ids, 'Gaia DR3 ')
-    system.gaiadr2 = _get_id(all_ids, 'Gaia DR2 ')
-    system.gaiadr3 = _get_id(all_ids, 'Gaia DR3 ')
-    system.twomass = _get_id(all_ids, '2MASS ')
-    system.wise = _get_id(all_ids, 'WISEA ')
+        system.tic = _get_id(all_ids, 'TIC ')
+        system.toi = _get_id(all_ids, 'TOI-')
+        system.gaia = _get_id(all_ids, 'Gaia DR3 ')
+        system.gaiadr2 = _get_id(all_ids, 'Gaia DR2 ')
+        system.gaiadr3 = _get_id(all_ids, 'Gaia DR3 ')
+        system.twomass = _get_id(all_ids, '2MASS ')
+        system.wise = _get_id(all_ids, 'WISEA ')
+    except Exception as e:
+        print(f'Error getting IDs for {name}: {e}')
 
     return system
 
